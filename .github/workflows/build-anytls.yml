@@ -64,7 +64,7 @@ jobs:
         cd ${{ github.workspace }}/V2rayNG
         echo "sdk.dir=${ANDROID_HOME}" > local.properties
         chmod 755 gradlew
-        ./gradlew assembleFdroidDebug --info --stacktrace 2>&1 | tail -200
+        ./gradlew assembleFdroidDebug --info --stacktrace
 
     - name: Find APK files
       if: always()
