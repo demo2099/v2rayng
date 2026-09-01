@@ -66,9 +66,16 @@ jobs:
         chmod 755 gradlew
         ./gradlew assembleFdroidDebug --stacktrace 2>&1 | tail -100
 
+    - name: Find APK files
+      run: |
+        echo "=== APK output ==="
+        find ${{ github.workspace }}/V2rayNG/app/build/outputs -name "*.apk" -ls 2>/dev/null || echo "No APK found"
+        echo "=== Full outputs tree ==="
+        find ${{ github.workspace }}/V2rayNG/app/build/outputs -type f 2>/dev/null | head -30 || echo "No outputs dir"
+
     - name: Upload Debug APK
       uses: actions/upload-artifact@v7
-      if: success()
+      if: always()
       with:
         name: v2rayNG-anytls-debug
-        path: ${{ github.workspace }}/V2rayNG/app/build/outputs/apk/*/debug/*.apk
+        path: ${{ github.workspace }}/V2rayNG/app/build/outputs/apk/**/*
