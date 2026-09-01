@@ -1,6 +1,7 @@
 package com.v2ray.ang.core
 
 import android.net.ConnectivityManager
+import android.net.IpPrefix
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.VpnService
@@ -73,7 +74,7 @@ class SingBoxPlatformInterface(
             while (ex4.hasNext()) {
                 val a: RoutePrefix = ex4.next()
                 try {
-                    builder.excludeRoute(InetAddress.getByName(a.address()), a.prefix())
+                    builder.excludeRoute(IpPrefix(InetAddress.getByName(a.address()), a.prefix()))
                 } catch (e: Exception) {
                     LogUtil.w(AppConfig.TAG, "Failed to exclude IPv4 route: ${a.address()}/${a.prefix()}")
                 }
@@ -82,7 +83,7 @@ class SingBoxPlatformInterface(
             while (ex6.hasNext()) {
                 val a: RoutePrefix = ex6.next()
                 try {
-                    builder.excludeRoute(InetAddress.getByName(a.address()), a.prefix())
+                    builder.excludeRoute(IpPrefix(InetAddress.getByName(a.address()), a.prefix()))
                 } catch (e: Exception) {
                     LogUtil.w(AppConfig.TAG, "Failed to exclude IPv6 route: ${a.address()}/${a.prefix()}")
                 }
