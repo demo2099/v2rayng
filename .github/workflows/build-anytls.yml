@@ -38,7 +38,17 @@ jobs:
     - name: Add NDK version to build.gradle.kts
       run: |
         cd V2rayNG/app
-        sed -i '10a\            ndkVersion = "29.0.14206865"' build.gradle.kts
+        python3 -c "
+        with open('build.gradle.kts', 'r') as f:
+            lines = f.readlines()
+        for i, line in enumerate(lines):
+            if 'compileSdk' in line:
+                lines.insert(i, '            ndkVersion = \"29.0.14206865\"\n')
+                break
+        with open('build.gradle.kts', 'w') as f:
+            f.writelines(lines)
+        "
+        grep -n ndkVersion build.gradle.kts
 
     - name: Build libhevtun (optional)
       continue-on-error: true
@@ -67,15 +77,17 @@ jobs:
         cd V2rayNG
         echo "sdk.dir=${ANDROID_HOME}" > local.properties
         chmod 755 gradlew
-        set -o pipefail
-        ./gradlew assembleFdroidDebug --stacktrace 2>&1 | tee /tmp/build.log
+        ./gradlew assembleFdroidDebug --stacktrace > /tmp/build.log 2>&1
+        BUILD_EXIT=$?
+        echo "BUILD_EXIT=$BUILD_EXIT" >> $GITHUB_ENV
+        exit $BUILD_EXIT
 
     - name: Collect build info
       if: always()
       run: |
-        echo "## Build Output" >> $GITHUB_STEP_SUMMARY
+        echo "## Build Output (last 100 lines)" >> $GITHUB_STEP_SUMMARY
         echo '```' >> $GITHUB_STEP_SUMMARY
-        tail -80 /tmp/build.log >> $GITHUB_STEP_SUMMARY 2>/dev/null || echo "No build log" >> $GITHUB_STEP_SUMMARY
+        tail -100 /tmp/build.log >> $GITHUB_STEP_SUMMARY 2>/dev/null || echo "No build log found" >> $GITHUB_STEP_SUMMARY
         echo '```' >> $GITHUB_STEP_SUMMARY
         echo "## APK Files" >> $GITHUB_STEP_SUMMARY
         echo '```' >> $GITHUB_STEP_SUMMARY
