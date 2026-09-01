@@ -21,6 +21,17 @@ jobs:
         submodules: 'recursive'
         fetch-depth: '0'
 
+    - name: Init submodules
+      run: |
+        git submodule sync --recursive
+        git submodule update --init --recursive || true
+        # Verify AndroidLibXrayLite exists
+        if [ ! -d "AndroidLibXrayLite" ] || [ -z "$(ls -A AndroidLibXrayLite 2>/dev/null)" ]; then
+          echo "AndroidLibXrayLite not found, cloning directly..."
+          git clone https://github.com/2dust/AndroidLibXrayLite.git AndroidLibXrayLite
+        fi
+        ls -la AndroidLibXrayLite/
+
     - name: Setup Android SDK
       uses: android-actions/setup-android@v4
       with:
@@ -40,22 +51,26 @@ jobs:
 
     - name: Build libhevtun
       continue-on-error: true
-      run: |
-        bash compile-hevtun.sh || true
-        mkdir -p ${{ github.workspace }}/V2rayNG/app/libs
+      run: bash compile-hevtun.sh || true
 
     - name: Copy libhevtun
       continue-on-error: true
       run: |
+        mkdir -p ${{ github.workspace }}/V2rayNG/app/libs
         cp -r ${{ github.workspace }}/libs/* ${{ github.workspace }}/V2rayNG/app/libs/ 2>/dev/null || true
 
     - name: Fetch AndroidLibXrayLite tag
       run: |
-        pushd AndroidLibXrayLite
-        CURRENT_TAG=$(git describe --tags --abbrev=0)
-        echo "Current tag in this repo: $CURRENT_TAG"
+        cd AndroidLibXrayLite
+        git fetch --tags || true
+        CURRENT_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+        if [ -z "$CURRENT_TAG" ]; then
+          echo "No tags found, trying latest release..."
+          CURRENT_TAG=$(git tag --sort=-version:refname | head -1)
+        fi
+        echo "Current tag: $CURRENT_TAG"
         echo "CURRENT_TAG=$CURRENT_TAG" >> $GITHUB_ENV
-        popd
+        cd ..
 
     - name: Download libv2ray
       uses: robinraju/release-downloader@v1.13
