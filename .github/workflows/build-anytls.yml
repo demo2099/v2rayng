@@ -64,7 +64,7 @@ jobs:
         cd ${{ github.workspace }}/V2rayNG
         echo "sdk.dir=${ANDROID_HOME}" > local.properties
         chmod 755 gradlew
-        ./gradlew assembleFdroidDebug
+        ./gradlew assembleFdroidDebug --stacktrace 2>&1 | tail -100
 
     - name: Upload Debug APK
       uses: actions/upload-artifact@v7
