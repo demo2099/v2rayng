@@ -247,7 +247,7 @@ object CoreServiceManager {
                 // Simple delay test via HTTP request
                 val url = SettingsManager.getDelayTestUrl()
                 val startTime = System.currentTimeMillis()
-                val connection = java.net.URL(url).openConnection()
+                val connection = java.net.URL(url).openConnection() as java.net.HttpURLConnection
                 connection.connectTimeout = 5000
                 connection.readTimeout = 5000
                 connection.connect()

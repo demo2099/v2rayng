@@ -95,10 +95,6 @@ object SingBoxNativeManager {
 
                 override fun setSystemProxyEnabled(enabled: Boolean) {}
 
-                override fun connectSSHAgent(): Int = -1
-
-                override fun triggerNativeCrash() {}
-
                 override fun writeDebugMessage(message: String) {
                     LogUtil.d(AppConfig.TAG, "sing-box: $message")
                 }

@@ -43,8 +43,8 @@ class SingBoxPlatformInterface(
     }
 
     override fun openTun(options: TunOptions): Int {
-        val builder = VpnService.Builder()
-            .setMtu(options.mtu)
+        val builder = android.net.VpnService.Builder()
+        builder.setMtu(options.mtu)
 
         val inet4 = options.inet4Address
         while (inet4.hasNext()) {
@@ -89,9 +89,14 @@ class SingBoxPlatformInterface(
             }
 
             try {
-                val dnsIter = options.dnsServerAddress
-                while (dnsIter.hasNext()) {
-                    builder.addDnsServer(InetAddress.getByName(dnsIter.next()))
+                val dnsStr = options.dnsServerAddress
+                val dnsAddr = dnsStr.getValue()
+                if (!dnsAddr.isNullOrEmpty()) {
+                    for (addr in dnsAddr.split("\n")) {
+                        if (addr.isNotBlank()) {
+                            builder.addDnsServer(InetAddress.getByName(addr.trim()))
+                        }
+                    }
                 }
             } catch (e: Exception) {
                 LogUtil.w(AppConfig.TAG, "Failed to add DNS server from TunOptions", e)

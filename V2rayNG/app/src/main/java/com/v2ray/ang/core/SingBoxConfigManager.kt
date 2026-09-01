@@ -46,7 +46,7 @@ object SingBoxConfigManager {
 
             val json = JsonUtil.toJsonPretty(config)
             LogUtil.d(AppConfig.TAG, "sing-box config generated: $json")
-            return ConfigResult(true, guid, json)
+            return ConfigResult(true, guid, json ?: "")
         } catch (e: Exception) {
             LogUtil.e(AppConfig.TAG, "Failed to generate sing-box config", e)
             return ConfigResult(false, guid, "Failed to generate config: ${e.message}")
@@ -69,7 +69,7 @@ object SingBoxConfigManager {
         servers.add(JsonObject().apply {
             addProperty("tag", "remote")
             addProperty("type", "https")
-            addProperty("server", SettingsManager.getRemoteDns().firstOrNull() ?: "https://1.1.1.1/dns-query")
+            addProperty("server", SettingsManager.getRemoteDnsServers().firstOrNull() ?: "https://1.1.1.1/dns-query")
             addProperty("detour", "proxy")
         })
 
@@ -77,7 +77,7 @@ object SingBoxConfigManager {
         servers.add(JsonObject().apply {
             addProperty("tag", "local")
             addProperty("type", "https")
-            addProperty("server", SettingsManager.getDomesticDns().firstOrNull() ?: "https://dns.alidns.com/dns-query")
+            addProperty("server", SettingsManager.getDomesticDnsServers().firstOrNull() ?: "https://dns.alidns.com/dns-query")
             addProperty("detour", "direct")
         })
 
@@ -104,7 +104,7 @@ object SingBoxConfigManager {
 
         add("rules", rules)
         addProperty("final", "remote")
-        addProperty("strategy", if (SettingsManager.isPreferIpv6()) "prefer_ipv6" else "prefer_ipv4")
+        addProperty("strategy", if (MmkvManager.decodeSettingsBool(AppConfig.PREF_PREFER_IPV6)) "prefer_ipv6" else "prefer_ipv4")
         addProperty("independent_cache", true)
     }
 
@@ -179,10 +179,10 @@ object SingBoxConfigManager {
             addProperty("type", "selector")
             addProperty("tag", "proxy")
             val outbounds = JsonArray()
-            outbounds.add("direct")
             if (outbound != null) {
-                outbounds.add(0, outbound.get("tag")?.asString ?: "proxy-out")
+                outbounds.add(outbound.get("tag")?.asString ?: "proxy-out")
             }
+            outbounds.add("direct")
             add("outbounds", outbounds)
             addProperty("default", outbound?.get("tag")?.asString ?: "direct")
         })
