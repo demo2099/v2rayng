@@ -21,17 +21,6 @@ jobs:
         submodules: 'recursive'
         fetch-depth: '0'
 
-    - name: Debug submodules
-      run: |
-        echo "=== .gitmodules ==="
-        cat .gitmodules 2>/dev/null || echo "No .gitmodules"
-        echo "=== AndroidLibXrayLite ==="
-        ls -la AndroidLibXrayLite/ 2>/dev/null || echo "Directory empty or missing"
-        echo "=== hev-socks5-tunnel ==="
-        ls -la hev-socks5-tunnel/ 2>/dev/null || echo "Directory empty or missing"
-        echo "=== git submodule status ==="
-        git submodule status 2>&1
-
     - name: Setup Android SDK
       uses: android-actions/setup-android@v4
       with:
@@ -51,32 +40,18 @@ jobs:
 
     - name: Build libhevtun
       continue-on-error: true
-      run: bash compile-hevtun.sh
+      run: bash compile-hevtun.sh || true
 
-    - name: Copy libhevtun
-      continue-on-error: true
-      run: cp -r ${{ github.workspace }}/libs ${{ github.workspace }}/V2rayNG/app
-
-    - name: Fetch AndroidLibXrayLite tag
+    - name: Prepare libs
       run: |
-        pushd AndroidLibXrayLite
-        git fetch --tags 2>&1 || true
-        CURRENT_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-        if [ -z "$CURRENT_TAG" ]; then
-          CURRENT_TAG="v26.8.20"
-          echo "Using fallback tag: $CURRENT_TAG"
-        fi
-        echo "Current tag in this repo: $CURRENT_TAG"
-        echo "CURRENT_TAG=$CURRENT_TAG" >> $GITHUB_ENV
-        popd
+        mkdir -p ${{ github.workspace }}/V2rayNG/app/libs
+        cp -r ${{ github.workspace }}/libs/* ${{ github.workspace }}/V2rayNG/app/libs/ 2>/dev/null || true
 
     - name: Download libv2ray
-      uses: robinraju/release-downloader@v1.13
-      with:
-        repository: '2dust/AndroidLibXrayLite'
-        tag: ${{ env.CURRENT_TAG }}
-        fileName: 'libv2ray.aar'
-        out-file-path: V2rayNG/app/libs/
+      run: |
+        curl -sL -o ${{ github.workspace }}/V2rayNG/app/libs/libv2ray.aar \
+          "https://github.com/2dust/AndroidLibXrayLite/releases/download/v26.8.20/libv2ray.aar"
+        ls -la ${{ github.workspace }}/V2rayNG/app/libs/libv2ray.aar
 
     - name: Setup Java
       uses: actions/setup-java@v6.0.0
