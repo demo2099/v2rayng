@@ -75,9 +75,17 @@ jobs:
         name: build-log
         path: /tmp/build.log
 
+    - name: List APK outputs
+      if: always()
+      run: |
+        echo "=== APK output directory ==="
+        find V2rayNG/app/build/outputs/apk -name "*.apk" 2>/dev/null || echo "No APK found"
+        echo "=== All build outputs ==="
+        find V2rayNG/app/build/outputs -name "*.apk" 2>/dev/null || echo "No APK in outputs"
+
     - name: Upload Debug APK
       uses: actions/upload-artifact@v7
       if: success()
       with:
         name: v2rayNG-anytls-debug
-        path: V2rayNG/app/build/outputs/apk/fdroid/debug/*.apk
+        path: ${{ github.workspace }}/V2rayNG/app/build/outputs/apk/**/*.apk
