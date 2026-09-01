@@ -21,6 +21,17 @@ jobs:
         submodules: 'recursive'
         fetch-depth: '0'
 
+    - name: Debug submodules
+      run: |
+        echo "=== .gitmodules ==="
+        cat .gitmodules 2>/dev/null || echo "No .gitmodules"
+        echo "=== AndroidLibXrayLite ==="
+        ls -la AndroidLibXrayLite/ 2>/dev/null || echo "Directory empty or missing"
+        echo "=== hev-socks5-tunnel ==="
+        ls -la hev-socks5-tunnel/ 2>/dev/null || echo "Directory empty or missing"
+        echo "=== git submodule status ==="
+        git submodule status 2>&1
+
     - name: Setup Android SDK
       uses: android-actions/setup-android@v4
       with:
@@ -49,7 +60,12 @@ jobs:
     - name: Fetch AndroidLibXrayLite tag
       run: |
         pushd AndroidLibXrayLite
-        CURRENT_TAG=$(git describe --tags --abbrev=0)
+        git fetch --tags 2>&1 || true
+        CURRENT_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+        if [ -z "$CURRENT_TAG" ]; then
+          CURRENT_TAG="v26.8.20"
+          echo "Using fallback tag: $CURRENT_TAG"
+        fi
         echo "Current tag in this repo: $CURRENT_TAG"
         echo "CURRENT_TAG=$CURRENT_TAG" >> $GITHUB_ENV
         popd
