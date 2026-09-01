@@ -62,11 +62,25 @@ jobs:
         java-version: '21'
 
     - name: Build Debug APK
+      id: build
       run: |
         cd V2rayNG
         echo "sdk.dir=${ANDROID_HOME}" > local.properties
         chmod 755 gradlew
+        set -o pipefail
         ./gradlew assembleFdroidDebug --stacktrace 2>&1 | tee /tmp/build.log
+
+    - name: Collect build info
+      if: always()
+      run: |
+        echo "## Build Output" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        tail -80 /tmp/build.log >> $GITHUB_STEP_SUMMARY 2>/dev/null || echo "No build log" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        echo "## APK Files" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        find V2rayNG/app/build/outputs -name "*.apk" -exec ls -lh {} \; 2>/dev/null >> $GITHUB_STEP_SUMMARY || echo "No APK found" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
 
     - name: Upload build log
       if: always()
@@ -74,14 +88,6 @@ jobs:
       with:
         name: build-log
         path: /tmp/build.log
-
-    - name: List APK outputs
-      if: always()
-      run: |
-        echo "=== APK output directory ==="
-        find V2rayNG/app/build/outputs/apk -name "*.apk" 2>/dev/null || echo "No APK found"
-        echo "=== All build outputs ==="
-        find V2rayNG/app/build/outputs -name "*.apk" 2>/dev/null || echo "No APK in outputs"
 
     - name: Upload Debug APK
       uses: actions/upload-artifact@v7
