@@ -1,11 +1,7 @@
-name: Build APK (AnyTLS)
+name: Build & Release APK (AnyTLS)
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - anytls-support
-      - main
 
 permissions:
   contents: write
@@ -59,26 +55,49 @@ jobs:
         distribution: 'temurin'
         java-version: '21'
 
+    - name: Get version info
+      id: version
+      run: |
+        cd ${{ github.workspace }}/V2rayNG
+        VERSION=$(grep 'versionName' app/build.gradle.kts | head -1 | sed 's/.*"\(.*\)".*/\1/')
+        CODE=$(grep 'versionCode' app/build.gradle.kts | head -1 | sed 's/.*= \([0-9]*\).*/\1/')
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "code=$CODE" >> $GITHUB_OUTPUT
+        echo "tag=anytls-v${VERSION}-${CODE}" >> $GITHUB_OUTPUT
+        echo "Version: $VERSION Code: $CODE"
+
     - name: Build APK
       run: |
         cd ${{ github.workspace }}/V2rayNG
         echo "sdk.dir=${ANDROID_HOME}" > local.properties
         chmod 755 gradlew
-        ./gradlew assembleFdroidDebug --stacktrace
+        ./gradlew assembleFdroidDebug
 
-    - name: Find all APK and build outputs
-      if: always()
+    - name: Find APK
+      id: find_apk
       run: |
-        echo "=== ALL build output files ==="
-        find ${{ github.workspace }}/V2rayNG/app/build/outputs -type f 2>/dev/null || echo "No outputs dir"
-        echo "=== ALL APK files ==="
-        find ${{ github.workspace }} -name "*.apk" 2>/dev/null || echo "No APK anywhere"
-        echo "=== Gradle tasks ==="
-        cd ${{ github.workspace }}/V2rayNG && ./gradlew tasks --all 2>&1 | grep -i "assemble.*fdroid" || echo "No fdroid tasks found"
+        APK_PATH=$(find ${{ github.workspace }}/V2rayNG/app/build/outputs/apk/fdroid/debug -name "*.apk" -print -quit 2>/dev/null)
+        if [ -z "$APK_PATH" ]; then
+          APK_PATH=$(find ${{ github.workspace }}/V2rayNG/app/build/outputs -name "*.apk" -print -quit 2>/dev/null)
+        fi
+        echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
+        echo "Found APK: $APK_PATH"
+        ls -lh "$APK_PATH" 2>/dev/null || echo "APK not found"
 
-    - name: Upload Build Outputs
-      uses: actions/upload-artifact@v7
-      if: always()
+    - name: Upload Release
+      uses: svenstaro/upload-release-action@v2
       with:
-        name: v2rayNG-anytls-debug
-        path: ${{ github.workspace }}/V2rayNG/app/build/outputs/
+        repo_token: ${{ secrets.GITHUB_TOKEN }}
+        tag: ${{ steps.version.outputs.tag }}
+        release_name: "AnyTLS Build ${{ steps.version.outputs.version }}"
+        body: |
+          v2rayNG with AnyTLS protocol support.
+          
+          ## AnyTLS + Reality URI format
+          ```
+          anytls://password@server:port?security=reality&sni=xxx&fp=chrome&pbk=xxx&sid=xxx&type=tcp#Name
+          ```
+        file: ${{ steps.find_apk.outputs.apk_path }}
+        asset_name: v2rayNG-anytls-${{ steps.version.outputs.version }}-fdroid.apk
+        overwrite: true
+        make_latest: true
