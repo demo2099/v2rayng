@@ -3,26 +3,21 @@ package com.v2ray.ang.core
 import android.content.Context
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.util.LogUtil
+import io.nekohasekai.libbox.CommandServer
+import io.nekohasekai.libbox.CommandServerHandler
 import io.nekohasekai.libbox.Libbox
+import io.nekohasekai.libbox.OverrideOptions
+import io.nekohasekai.libbox.PlatformInterface
 import io.nekohasekai.libbox.SetupOptions
+import io.nekohasekai.libbox.SystemProxyStatus
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 
-/**
- * sing-box Native Library Manager
- *
- * Thread-safe singleton wrapper for libbox (sing-box) native methods.
- * Replaces CoreNativeManager (xray-core) for full sing-box integration.
- */
 object SingBoxNativeManager {
     private val initialized = AtomicBoolean(false)
-    private var boxService: io.nekohasekai.libbox.BoxService? = null
+    private var commandServer: CommandServer? = null
     private val running = AtomicBoolean(false)
 
-    /**
-     * Initialize sing-box core environment.
-     * Must be called once in Application.onCreate().
-     */
     fun initCoreEnv(context: Context?) {
         if (initialized.compareAndSet(false, true)) {
             try {
@@ -52,9 +47,6 @@ object SingBoxNativeManager {
         }
     }
 
-    /**
-     * Get sing-box core version.
-     */
     fun getLibVersion(): String {
         return try {
             Libbox.version()
@@ -64,9 +56,6 @@ object SingBoxNativeManager {
         }
     }
 
-    /**
-     * Validate a sing-box configuration JSON string.
-     */
     fun checkConfig(config: String): Boolean {
         return try {
             Libbox.checkConfig(config)
@@ -77,14 +66,8 @@ object SingBoxNativeManager {
         }
     }
 
-    /**
-     * Start the sing-box service with the given configuration.
-     *
-     * @param config sing-box JSON configuration string
-     * @param platform PlatformInterface implementation for Android TUN/network
-     */
     @Synchronized
-    fun startService(config: String, platform: io.nekohasekai.libbox.PlatformInterface) {
+    fun startService(config: String, platform: PlatformInterface) {
         if (running.get()) {
             LogUtil.w(AppConfig.TAG, "sing-box service already running, stopping first")
             stopService()
@@ -92,9 +75,39 @@ object SingBoxNativeManager {
 
         try {
             LogUtil.i(AppConfig.TAG, "Starting sing-box service...")
-            val service = Libbox.newService(config, platform)
-            boxService = service
-            service.start()
+
+            val handler = object : CommandServerHandler {
+                override fun serviceReload() {
+                    LogUtil.d(AppConfig.TAG, "sing-box service reload requested")
+                }
+
+                override fun serviceStop() {
+                    LogUtil.d(AppConfig.TAG, "sing-box service stop requested")
+                    stopService()
+                }
+
+                override fun getSystemProxyStatus(): SystemProxyStatus {
+                    val status = SystemProxyStatus()
+                    status.available = false
+                    status.enabled = false
+                    return status
+                }
+
+                override fun setSystemProxyEnabled(enabled: Boolean) {}
+
+                override fun connectSSHAgent(): Int = -1
+
+                override fun triggerNativeCrash() {}
+
+                override fun writeDebugMessage(message: String) {
+                    LogUtil.d(AppConfig.TAG, "sing-box: $message")
+                }
+            }
+
+            val server = CommandServer(handler, platform)
+            server.start()
+            server.startOrReloadService(config, OverrideOptions())
+            commandServer = server
             running.set(true)
             LogUtil.i(AppConfig.TAG, "sing-box service started successfully")
         } catch (e: Exception) {
@@ -104,33 +117,25 @@ object SingBoxNativeManager {
         }
     }
 
-    /**
-     * Stop the running sing-box service.
-     */
     @Synchronized
     fun stopService() {
         try {
-            boxService?.close()
+            commandServer?.closeService()
+            commandServer?.close()
             LogUtil.i(AppConfig.TAG, "sing-box service stopped")
         } catch (e: Exception) {
             LogUtil.e(AppConfig.TAG, "Failed to stop sing-box service", e)
         } finally {
-            boxService = null
+            commandServer = null
             running.set(false)
         }
     }
 
-    /**
-     * Check if the sing-box service is running.
-     */
     fun isRunning(): Boolean = running.get()
 
-    /**
-     * Format a JSON configuration string (pretty print).
-     */
     fun formatConfig(config: String): String {
         return try {
-            Libbox.formatConfig(config)
+            Libbox.formatConfig(config).getValue()
         } catch (e: Exception) {
             config
         }

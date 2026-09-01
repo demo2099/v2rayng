@@ -8,10 +8,10 @@ import android.os.Build
 import android.system.OsConstants
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.util.LogUtil
-import io.nekohasekai.libbox.DNSServerAddress
+import io.nekohasekai.libbox.BridgeOptions
+import io.nekohasekai.libbox.BridgeSession
+import io.nekohasekai.libbox.ConnectionOwner
 import io.nekohasekai.libbox.ExchangeContext
-import io.nekohasekai.libbox.IpPrefix
-import io.nekohasekai.libbox.IpPrefixIterator
 import io.nekohasekai.libbox.InterfaceUpdateListener
 import io.nekohasekai.libbox.LocalDNSTransport
 import io.nekohasekai.libbox.NetworkInterface as LibboxNetworkInterface
@@ -19,19 +19,17 @@ import io.nekohasekai.libbox.NetworkInterfaceIterator
 import io.nekohasekai.libbox.NeighborUpdateListener
 import io.nekohasekai.libbox.Notification
 import io.nekohasekai.libbox.PlatformInterface
+import io.nekohasekai.libbox.PlatformUser
+import io.nekohasekai.libbox.RoutePrefix
+import io.nekohasekai.libbox.RoutePrefixIterator
+import io.nekohasekai.libbox.ShellSession
 import io.nekohasekai.libbox.StringIterator
 import io.nekohasekai.libbox.TunOptions
 import io.nekohasekai.libbox.WIFIState
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.NetworkInterface
-import java.security.KeyStore
-import android.util.Base64
 
-/**
- * sing-box PlatformInterface implementation for Android.
- * Bridges Android VPN service with sing-box's TUN/network abstraction.
- */
 class SingBoxPlatformInterface(
     private val service: VpnService,
     private val packagesToProxy: Set<String>? = null,
@@ -53,64 +51,60 @@ class SingBoxPlatformInterface(
 
     override fun openTun(options: TunOptions): Int {
         val builder = VpnService.Builder()
-            .setSession("sing-box")
             .setMtu(options.mtu)
 
-        // Add addresses from sing-box config
         val inet4 = options.inet4Address
         while (inet4.hasNext()) {
-            val prefix: IpPrefix = inet4.next()
-            builder.addAddress(prefix.address, prefix.prefix)
+            val prefix: RoutePrefix = inet4.next()
+            builder.addAddress(InetAddress.getByName(prefix.address()), prefix.prefix())
         }
         val inet6 = options.inet6Address
         while (inet6.hasNext()) {
-            val prefix: IpPrefix = inet6.next()
-            builder.addAddress(prefix.address, prefix.prefix)
+            val prefix: RoutePrefix = inet6.next()
+            builder.addAddress(InetAddress.getByName(prefix.address()), prefix.prefix())
         }
 
-        if (options.isAutoRoute) {
-            // Add routes
+        if (options.autoRoute) {
             val r4 = options.inet4RouteAddress
             while (r4.hasNext()) {
-                val a: IpPrefix = r4.next()
-                builder.addRoute(a.address, a.prefix)
+                val a: RoutePrefix = r4.next()
+                builder.addRoute(InetAddress.getByName(a.address()), a.prefix())
             }
             val r6 = options.inet6RouteAddress
             while (r6.hasNext()) {
-                val a: IpPrefix = r6.next()
-                builder.addRoute(a.address, a.prefix)
+                val a: RoutePrefix = r6.next()
+                builder.addRoute(InetAddress.getByName(a.address()), a.prefix())
             }
 
-            // Add excluded routes (bypass proxy server IP)
             val ex4 = options.inet4RouteExcludeAddress
             while (ex4.hasNext()) {
-                val a: IpPrefix = ex4.next()
+                val a: RoutePrefix = ex4.next()
                 try {
-                    builder.excludeRoute(InetAddress.getByName(a.address), a.prefix)
+                    builder.excludeRoute(InetAddress.getByName(a.address()), a.prefix())
                 } catch (e: Exception) {
-                    LogUtil.w(AppConfig.TAG, "Failed to exclude IPv4 route: ${a.address}/${a.prefix}")
+                    LogUtil.w(AppConfig.TAG, "Failed to exclude IPv4 route: ${a.address()}/${a.prefix()}")
                 }
             }
             val ex6 = options.inet6RouteExcludeAddress
             while (ex6.hasNext()) {
-                val a: IpPrefix = ex6.next()
+                val a: RoutePrefix = ex6.next()
                 try {
-                    builder.excludeRoute(InetAddress.getByName(a.address), a.prefix)
+                    builder.excludeRoute(InetAddress.getByName(a.address()), a.prefix())
                 } catch (e: Exception) {
-                    LogUtil.w(AppConfig.TAG, "Failed to exclude IPv6 route: ${a.address}/${a.prefix}")
+                    LogUtil.w(AppConfig.TAG, "Failed to exclude IPv6 route: ${a.address()}/${a.prefix()}")
                 }
             }
 
-            // Add DNS servers
             try {
-                val dnsAddr: DNSServerAddress = options.dnsServerAddress
-                builder.addDnsServer(dnsAddr.value)
+                val dnsIter = options.dnsServerAddress
+                while (dnsIter.hasNext()) {
+                    builder.addDnsServer(InetAddress.getByName(dnsIter.next()))
+                }
             } catch (e: Exception) {
                 LogUtil.w(AppConfig.TAG, "Failed to add DNS server from TunOptions", e)
             }
         }
 
-        // Per-app proxy
         val includePkgs = options.includePackage
         while (includePkgs.hasNext()) {
             val pkg = includePkgs.next()
@@ -130,7 +124,6 @@ class SingBoxPlatformInterface(
             }
         }
 
-        // Always exclude our own app
         try {
             builder.addDisallowedApplication(service.packageName)
         } catch (e: Exception) {
@@ -149,40 +142,27 @@ class SingBoxPlatformInterface(
         sourcePort: Int,
         destinationAddress: String,
         destinationPort: Int
-    ): Int {
+    ): ConnectionOwner {
+        val owner = ConnectionOwner()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             try {
-                return connectivity.getConnectionOwnerUid(
+                val uid = connectivity.getConnectionOwnerUid(
                     ipProtocol,
                     InetSocketAddress(sourceAddress, sourcePort),
                     InetSocketAddress(destinationAddress, destinationPort)
                 )
+                owner.userId = uid
+                val packages = service.packageManager.getPackagesForUid(uid)
+                if (!packages.isNullOrEmpty()) {
+                    owner.setAndroidPackageNames(StringArray(packages.iterator()))
+                }
+                return owner
             } catch (e: Exception) {
                 LogUtil.d(AppConfig.TAG, "findConnectionOwner failed: ${e.message}")
             }
         }
-        return -1
-    }
-
-    override fun packageNameByUid(uid: Int): String {
-        val packages = service.packageManager.getPackagesForUid(uid)
-        return packages?.firstOrNull() ?: ""
-    }
-
-    override fun uidByPackageName(packageName: String): Int {
-        return try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                service.packageManager.getApplicationInfo(
-                    packageName,
-                    android.content.pm.PackageManager.ApplicationInfoFlags.of(0)
-                ).uid
-            } else {
-                @Suppress("DEPRECATION")
-                service.packageManager.getApplicationInfo(packageName, 0).uid
-            }
-        } catch (e: android.content.pm.PackageManager.NameNotFoundException) {
-            -1
-        }
+        owner.userId = -1
+        return owner
     }
 
     override fun startDefaultInterfaceMonitor(listener: InterfaceUpdateListener) {
@@ -252,10 +232,10 @@ class SingBoxPlatformInterface(
             } catch (_: Exception) {
             }
             boxIf.type = when {
-                caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> 0 // InterfaceTypeWIFI
-                caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> 1 // InterfaceTypeCellular
-                caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> 2 // InterfaceTypeEthernet
-                else -> 3 // InterfaceTypeOther
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> 0
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> 1
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> 2
+                else -> 3
             }
             boxIf.dnsServer = StringArray(lp.dnsServers.mapNotNull { it.hostAddress }.iterator())
             boxIf.addresses = StringArray(sysIf.interfaceAddresses.map { ia ->
@@ -301,7 +281,7 @@ class SingBoxPlatformInterface(
                     }
                     ctx.success(addresses.mapNotNull { it.hostAddress }.joinToString("\n"))
                 } catch (e: Exception) {
-                    ctx.errorCode(3) // NXDOMAIN
+                    ctx.errorCode(3)
                 }
             }
 
@@ -311,41 +291,42 @@ class SingBoxPlatformInterface(
         }
     }
 
-    override fun sendNotification(notification: Notification) {
-        // no-op for now
-    }
+    override fun sendNotification(notification: Notification) {}
 
-    override fun startNeighborMonitor(listener: NeighborUpdateListener) {
-        // no-op
-    }
+    override fun startNeighborMonitor(listener: NeighborUpdateListener) {}
 
-    override fun closeNeighborMonitor(listener: NeighborUpdateListener) {
-        // no-op
-    }
+    override fun closeNeighborMonitor(listener: NeighborUpdateListener) {}
 
     override fun registerMyInterface(name: String) {
         defaultInterface = name
     }
 
-    override fun systemCertificates(): StringIterator {
-        val certificates = mutableListOf<String>()
-        try {
-            val keyStore = KeyStore.getInstance("AndroidCAStore")
-            keyStore.load(null, null)
-            val aliases = keyStore.aliases()
-            while (aliases.hasMoreElements()) {
-                val cert = keyStore.getCertificate(aliases.nextElement())
-                certificates.add(
-                    "-----BEGIN CERTIFICATE-----\n" +
-                            Base64.encodeToString(cert.encoded, Base64.NO_WRAP) +
-                            "\n-----END CERTIFICATE-----"
-                )
-            }
-        } catch (e: Exception) {
-            LogUtil.e(AppConfig.TAG, "Failed to load system certificates", e)
-        }
-        return StringArray(certificates.iterator())
-    }
+    override fun usePlatformBridge(): Boolean = false
+
+    override fun usePlatformShell(): Boolean = false
+
+    override fun checkPlatformShell() {}
+
+    override fun createBridge(options: BridgeOptions): BridgeSession? = null
+
+    override fun lookupSFTPServer(): String? = null
+
+    override fun lookupUser(username: String): PlatformUser? = null
+
+    override fun openShellSession(
+        user: PlatformUser,
+        command: String,
+        environ: StringIterator,
+        term: String,
+        rows: Int,
+        cols: Int
+    ): ShellSession? = null
+
+    override fun readSystemSSHHostKey(): String? = null
+
+    override fun tailscaleHostname(): String? = null
+
+    override fun cancelNotification(identifier: String, typeID: Int) {}
 
     private fun notifyInterfaceUpdate(network: Network, listener: InterfaceUpdateListener) {
         val cm = connectivity
@@ -364,9 +345,6 @@ class SingBoxPlatformInterface(
         }
     }
 
-    /**
-     * Helper class to wrap Iterator<String> as gomobile StringIterator.
-     */
     class StringArray(private val iterator: Iterator<String>) : StringIterator {
         override fun len(): Int = 0
         override fun hasNext(): Boolean = iterator.hasNext()
