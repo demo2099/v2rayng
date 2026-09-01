@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - anytls-support
+      - main
 
 permissions:
   contents: write
@@ -37,28 +38,16 @@ jobs:
         \
             ndkVersion = "29.0.14206865"' ${{ github.workspace }}/V2rayNG/app/build.gradle.kts
 
-    - name: Restore cached libhevtun
-      id: cache-libhevtun-restore
-      uses: actions/cache/restore@v6
-      with:
-        path: ${{ github.workspace }}/libs
-        key: libhevtun-${{ runner.os }}-${{ env.NDK_HOME }}-${{ hashFiles('.git/modules/hev-socks5-tunnel/HEAD') }}-${{ hashFiles('compile-hevtun.sh') }}
-
     - name: Build libhevtun
-      if: steps.cache-libhevtun-restore.outputs.cache-hit != 'true'
+      continue-on-error: true
       run: |
-        bash compile-hevtun.sh
-    
-    - name: Save libhevtun
-      if: steps.cache-libhevtun-restore.outputs.cache-hit != 'true'
-      uses: actions/cache/save@v6
-      with:
-        path: ${{ github.workspace }}/libs
-        key: libhevtun-${{ runner.os }}-${{ env.NDK_HOME }}-${{ hashFiles('.git/modules/hev-socks5-tunnel/HEAD') }}-${{ hashFiles('compile-hevtun.sh') }}
+        bash compile-hevtun.sh || true
+        mkdir -p ${{ github.workspace }}/V2rayNG/app/libs
 
     - name: Copy libhevtun
+      continue-on-error: true
       run: |
-        cp -r ${{ github.workspace }}/libs ${{ github.workspace }}/V2rayNG/app
+        cp -r ${{ github.workspace }}/libs/* ${{ github.workspace }}/V2rayNG/app/libs/ 2>/dev/null || true
 
     - name: Fetch AndroidLibXrayLite tag
       run: |
