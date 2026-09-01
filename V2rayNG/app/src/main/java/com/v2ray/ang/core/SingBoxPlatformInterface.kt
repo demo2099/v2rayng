@@ -45,12 +45,8 @@ class SingBoxPlatformInterface(
         service.protect(fd)
     }
 
-    private fun buildVpnBuilder(): VpnService.Builder {
-        return object : VpnService.Builder() {}
-    }
-
     override fun openTun(options: TunOptions): Int {
-        val builder = buildVpnBuilder()
+        val builder = service.Builder()
         builder.setMtu(options.mtu)
 
         val inet4 = options.inet4Address
