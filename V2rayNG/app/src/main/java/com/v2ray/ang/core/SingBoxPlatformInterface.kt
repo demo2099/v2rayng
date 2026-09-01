@@ -6,6 +6,8 @@ import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.VpnService
 import android.os.Build
+import android.os.ParcelFileDescriptor
+import android.system.Os
 import android.system.OsConstants
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.util.LogUtil
@@ -43,8 +45,12 @@ class SingBoxPlatformInterface(
         service.protect(fd)
     }
 
+    private fun buildVpnBuilder(): VpnService.Builder {
+        return object : VpnService.Builder() {}
+    }
+
     override fun openTun(options: TunOptions): Int {
-        val builder = VpnServiceHelper.newBuilder()
+        val builder = buildVpnBuilder()
         builder.setMtu(options.mtu)
 
         val inet4 = options.inet4Address
@@ -70,22 +76,24 @@ class SingBoxPlatformInterface(
                 builder.addRoute(InetAddress.getByName(a.address()), a.prefix())
             }
 
-            val ex4 = options.inet4RouteExcludeAddress
-            while (ex4.hasNext()) {
-                val a: RoutePrefix = ex4.next()
-                try {
-                    builder.excludeRoute(IpPrefix(InetAddress.getByName(a.address()), a.prefix()))
-                } catch (e: Exception) {
-                    LogUtil.w(AppConfig.TAG, "Failed to exclude IPv4 route: ${a.address()}/${a.prefix()}")
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                val ex4 = options.inet4RouteExcludeAddress
+                while (ex4.hasNext()) {
+                    val a: RoutePrefix = ex4.next()
+                    try {
+                        builder.excludeRoute(IpPrefix(InetAddress.getByName(a.address()), a.prefix()))
+                    } catch (e: Exception) {
+                        LogUtil.w(AppConfig.TAG, "Failed to exclude IPv4 route: ${a.address()}/${a.prefix()}")
+                    }
                 }
-            }
-            val ex6 = options.inet6RouteExcludeAddress
-            while (ex6.hasNext()) {
-                val a: RoutePrefix = ex6.next()
-                try {
-                    builder.excludeRoute(IpPrefix(InetAddress.getByName(a.address()), a.prefix()))
-                } catch (e: Exception) {
-                    LogUtil.w(AppConfig.TAG, "Failed to exclude IPv6 route: ${a.address()}/${a.prefix()}")
+                val ex6 = options.inet6RouteExcludeAddress
+                while (ex6.hasNext()) {
+                    val a: RoutePrefix = ex6.next()
+                    try {
+                        builder.excludeRoute(IpPrefix(InetAddress.getByName(a.address()), a.prefix()))
+                    } catch (e: Exception) {
+                        LogUtil.w(AppConfig.TAG, "Failed to exclude IPv6 route: ${a.address()}/${a.prefix()}")
+                    }
                 }
             }
 
