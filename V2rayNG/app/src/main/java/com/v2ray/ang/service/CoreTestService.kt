@@ -8,7 +8,7 @@ import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.R
-import com.v2ray.ang.core.CoreNativeManager
+import com.v2ray.ang.core.SingBoxNativeManager
 import com.v2ray.ang.dto.RealPingEvent
 import com.v2ray.ang.dto.TestServiceMessage
 import com.v2ray.ang.enums.NotificationChannelType
@@ -52,7 +52,7 @@ class CoreTestService : Service() {
      */
     override fun onCreate() {
         super.onCreate()
-        CoreNativeManager.initCoreEnv(this)
+        SingBoxNativeManager.initCoreEnv(this)
     }
 
     /**

@@ -1,4 +1,4 @@
-name: Build & Release APK (AnyTLS)
+name: Build v2rayNG with sing-box (AnyTLS)
 
 on:
   workflow_dispatch:
@@ -34,20 +34,19 @@ jobs:
         \
             ndkVersion = "29.0.14206865"' ${{ github.workspace }}/V2rayNG/app/build.gradle.kts
 
-    - name: Build libhevtun
-      continue-on-error: true
-      run: bash compile-hevtun.sh || true
-
-    - name: Prepare libs
+    - name: Download libbox.aar (sing-box)
       run: |
         mkdir -p ${{ github.workspace }}/V2rayNG/app/libs
-        cp -r ${{ github.workspace }}/libs/* ${{ github.workspace }}/V2rayNG/app/libs/ 2>/dev/null || true
+        curl -sL -o /tmp/libbox-android.aar.zip \
+          "https://github.com/proother/sing-box-lib/releases/download/v1.13.21/libbox-android.aar.zip"
+        cd /tmp && unzip -q libbox-android.aar.zip
+        cp /tmp/libbox-android/libbox.aar ${{ github.workspace }}/V2rayNG/app/libs/
+        ls -lh ${{ github.workspace }}/V2rayNG/app/libs/libbox.aar
 
-    - name: Download libv2ray
+    - name: Remove libv2ray (replaced by libbox)
       run: |
-        curl -sL -o ${{ github.workspace }}/V2rayNG/app/libs/libv2ray.aar \
-          "https://github.com/2dust/AndroidLibXrayLite/releases/download/v26.8.20/libv2ray.aar"
-        ls -la ${{ github.workspace }}/V2rayNG/app/libs/libv2ray.aar
+        rm -f ${{ github.workspace }}/V2rayNG/app/libs/libv2ray.aar
+        rm -f ${{ github.workspace }}/V2rayNG/app/libs/libhev-socks5-tunnel.so
 
     - name: Setup Java
       uses: actions/setup-java@v6.0.0
@@ -63,7 +62,7 @@ jobs:
         CODE=$(grep 'versionCode' app/build.gradle.kts | head -1 | sed 's/.*= \([0-9]*\).*/\1/')
         echo "version=$VERSION" >> $GITHUB_OUTPUT
         echo "code=$CODE" >> $GITHUB_OUTPUT
-        echo "tag=anytls-v${VERSION}-${CODE}" >> $GITHUB_OUTPUT
+        echo "tag=singbox-v${VERSION}-${CODE}" >> $GITHUB_OUTPUT
         echo "Version: $VERSION Code: $CODE"
 
     - name: Build APK
@@ -89,15 +88,19 @@ jobs:
       with:
         repo_token: ${{ secrets.GITHUB_TOKEN }}
         tag: ${{ steps.version.outputs.tag }}
-        release_name: "AnyTLS Build ${{ steps.version.outputs.version }}"
+        release_name: "sing-box Build ${{ steps.version.outputs.version }}"
         body: |
-          v2rayNG with AnyTLS protocol support.
+          v2rayNG with sing-box core (replaces xray-core).
+          Supports AnyTLS+REALITY and all standard protocols.
+          
+          ## Protocols
+          AnyTLS, VMess, VLESS, Shadowsocks, Trojan, WireGuard, Hysteria2, SOCKS, HTTP
           
           ## AnyTLS + Reality URI format
           ```
           anytls://password@server:port?security=reality&sni=xxx&fp=chrome&pbk=xxx&sid=xxx&type=tcp#Name
           ```
         file: ${{ steps.find_apk.outputs.apk_path }}
-        asset_name: v2rayNG-anytls-${{ steps.version.outputs.version }}-fdroid.apk
+        asset_name: v2rayNG-singbox-${{ steps.version.outputs.version }}-fdroid.apk
         overwrite: true
         make_latest: true

@@ -2,7 +2,6 @@ package com.v2ray.ang.service
 
 import android.content.Context
 import com.v2ray.ang.core.CoreConfigManager
-import com.v2ray.ang.core.CoreNativeManager
 import com.v2ray.ang.dto.RealPingEvent
 import com.v2ray.ang.enums.EConfigType
 import com.v2ray.ang.extension.isComplexType
@@ -128,7 +127,27 @@ class RealPingWorkerService(
             return retFailure
         }
         return RealPingExecutionLimiter.run(config.configType) {
-            CoreNativeManager.measureOutboundDelay(configResult.content, SettingsManager.getDelayTestUrl())
+            measureHttpDelay(SettingsManager.getDelayTestUrl())
+        }
+    }
+
+    private fun measureHttpDelay(url: String): Long {
+        return try {
+            val startTime = System.currentTimeMillis()
+            val connection = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+            connection.connectTimeout = 5000
+            connection.readTimeout = 5000
+            connection.requestMethod = "HEAD"
+            connection.connect()
+            val responseCode = connection.responseCode
+            connection.disconnect()
+            if (responseCode == 200 || responseCode == 301 || responseCode == 302) {
+                System.currentTimeMillis() - startTime
+            } else {
+                -1L
+            }
+        } catch (e: Exception) {
+            -1L
         }
     }
 

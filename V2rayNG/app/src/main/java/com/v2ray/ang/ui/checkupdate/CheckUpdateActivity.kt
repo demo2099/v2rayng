@@ -23,7 +23,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.v2ray.ang.BuildConfig
 import com.v2ray.ang.R
-import com.v2ray.ang.core.CoreNativeManager
+import com.v2ray.ang.core.SingBoxNativeManager
 import com.v2ray.ang.ui.base.BaseComponentActivity
 import com.v2ray.ang.ui.compose.AppTopBar
 import com.v2ray.ang.ui.compose.NavigationBarsSpacer
@@ -62,7 +62,7 @@ fun CheckUpdateScreen(
     val showUpdateDialog by viewModel.showUpdateDialog.collectAsStateWithLifecycle()
     val updateResult by viewModel.updateResult.collectAsStateWithLifecycle()
 
-    val libVersion = CoreNativeManager.getLibVersion()
+    val libVersion = SingBoxNativeManager.getLibVersion()
     val versionText = "v${BuildConfig.VERSION_NAME} ($libVersion)"
 
     Scaffold(

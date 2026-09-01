@@ -67,3 +67,7 @@ V2rayNG/app/google-services.json
 # Ignore OS-specific files
 Thumbs.db
 .DS_Store
+
+# sing-box AAR (downloaded during CI build)
+V2rayNG/app/libs/libbox.aar
+V2rayNG/app/libs/*.zip

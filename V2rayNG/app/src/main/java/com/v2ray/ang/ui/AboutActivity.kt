@@ -30,7 +30,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.BuildConfig
 import com.v2ray.ang.R
-import com.v2ray.ang.core.CoreNativeManager
+import com.v2ray.ang.core.SingBoxNativeManager
 import com.v2ray.ang.ui.base.BaseComponentActivity
 import com.v2ray.ang.ui.compose.AppTopBar
 import com.v2ray.ang.ui.compose.NavigationBarsSpacer
@@ -63,7 +63,7 @@ fun AboutScreen(
     val context = LocalContext.current
     var showOssDialog by remember { mutableStateOf(false) }
 
-    val libVersion = CoreNativeManager.getLibVersion()
+    val libVersion = SingBoxNativeManager.getLibVersion()
     val versionText = "v${BuildConfig.VERSION_NAME} ($libVersion)"
     val appIdText = BuildConfig.APPLICATION_ID
 

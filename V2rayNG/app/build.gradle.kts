@@ -147,12 +147,20 @@ android {
         jniLibs {
             useLegacyPackaging = true
         }
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            excludes += "go/Seq.class"
+            excludes += "go/Seq$1.class"
+        }
     }
 
 }
 
 dependencies {
-    // Core Libraries
+    // sing-box core library (replaces xray-core/libv2ray)
+    // Option 1: Place libbox.aar manually in app/libs/ (fileTree picks it up)
+    // Option 2: Maven Central dependency (uncomment below)
+    // implementation("net.clever-vpn:libbox-android:2.1.2")
     implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.aar", "*.jar"))))
 
     // AndroidX Core Libraries

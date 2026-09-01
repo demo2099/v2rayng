@@ -6,7 +6,7 @@ import android.content.Intent
 import android.os.IBinder
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.R
-import com.v2ray.ang.core.CoreNativeManager
+import com.v2ray.ang.core.SingBoxNativeManager
 import com.v2ray.ang.dto.RealPingEvent
 import com.v2ray.ang.dto.SubscriptionUpdateMessage
 import com.v2ray.ang.dto.entities.SubscriptionCache
@@ -45,7 +45,7 @@ class SubscriptionUpdateService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        CoreNativeManager.initCoreEnv(this)
+        SingBoxNativeManager.initCoreEnv(this)
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
