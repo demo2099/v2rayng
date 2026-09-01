@@ -34,36 +34,33 @@ jobs:
           --channel=0 \
           --install "ndk;29.0.14206865"
         echo "NDK_HOME=$ANDROID_HOME/ndk/29.0.14206865" >> $GITHUB_ENV
+        sed -i '10i\
+        \
+            ndkVersion = "29.0.14206865"' ${{ github.workspace }}/V2rayNG/app/build.gradle.kts
 
-    - name: Add NDK version to build.gradle.kts
-      run: |
-        cd V2rayNG/app
-        python3 -c "
-        with open('build.gradle.kts', 'r') as f:
-            lines = f.readlines()
-        for i, line in enumerate(lines):
-            if 'compileSdk' in line:
-                lines.insert(i, '            ndkVersion = \"29.0.14206865\"\n')
-                break
-        with open('build.gradle.kts', 'w') as f:
-            f.writelines(lines)
-        "
-        grep -n ndkVersion build.gradle.kts
-
-    - name: Build libhevtun (optional)
+    - name: Build libhevtun
       continue-on-error: true
-      run: bash compile-hevtun.sh || true
+      run: bash compile-hevtun.sh
 
-    - name: Prepare libs directory
-      run: |
-        mkdir -p V2rayNG/app/libs
-        cp -r libs/* V2rayNG/app/libs/ 2>/dev/null || true
+    - name: Copy libhevtun
+      continue-on-error: true
+      run: cp -r ${{ github.workspace }}/libs ${{ github.workspace }}/V2rayNG/app
 
-    - name: Download libv2ray.aar
+    - name: Fetch AndroidLibXrayLite tag
       run: |
-        cd V2rayNG/app/libs
-        curl -sL -o libv2ray.aar "https://github.com/2dust/AndroidLibXrayLite/releases/download/v26.8.20/libv2ray.aar"
-        ls -la libv2ray.aar
+        pushd AndroidLibXrayLite
+        CURRENT_TAG=$(git describe --tags --abbrev=0)
+        echo "Current tag in this repo: $CURRENT_TAG"
+        echo "CURRENT_TAG=$CURRENT_TAG" >> $GITHUB_ENV
+        popd
+
+    - name: Download libv2ray
+      uses: robinraju/release-downloader@v1.13
+      with:
+        repository: '2dust/AndroidLibXrayLite'
+        tag: ${{ env.CURRENT_TAG }}
+        fileName: 'libv2ray.aar'
+        out-file-path: V2rayNG/app/libs/
 
     - name: Setup Java
       uses: actions/setup-java@v6.0.0
@@ -71,39 +68,16 @@ jobs:
         distribution: 'temurin'
         java-version: '21'
 
-    - name: Build Debug APK
-      id: build
+    - name: Build APK
       run: |
-        cd V2rayNG
+        cd ${{ github.workspace }}/V2rayNG
         echo "sdk.dir=${ANDROID_HOME}" > local.properties
         chmod 755 gradlew
-        ./gradlew assembleFdroidDebug --stacktrace > /tmp/build.log 2>&1
-        BUILD_EXIT=$?
-        echo "BUILD_EXIT=$BUILD_EXIT" >> $GITHUB_ENV
-        exit $BUILD_EXIT
-
-    - name: Collect build info
-      if: always()
-      run: |
-        echo "## Build Output (last 100 lines)" >> $GITHUB_STEP_SUMMARY
-        echo '```' >> $GITHUB_STEP_SUMMARY
-        tail -100 /tmp/build.log >> $GITHUB_STEP_SUMMARY 2>/dev/null || echo "No build log found" >> $GITHUB_STEP_SUMMARY
-        echo '```' >> $GITHUB_STEP_SUMMARY
-        echo "## APK Files" >> $GITHUB_STEP_SUMMARY
-        echo '```' >> $GITHUB_STEP_SUMMARY
-        find V2rayNG/app/build/outputs -name "*.apk" -exec ls -lh {} \; 2>/dev/null >> $GITHUB_STEP_SUMMARY || echo "No APK found" >> $GITHUB_STEP_SUMMARY
-        echo '```' >> $GITHUB_STEP_SUMMARY
-
-    - name: Upload build log
-      if: always()
-      uses: actions/upload-artifact@v7
-      with:
-        name: build-log
-        path: /tmp/build.log
+        ./gradlew assembleFdroidDebug
 
     - name: Upload Debug APK
       uses: actions/upload-artifact@v7
       if: success()
       with:
         name: v2rayNG-anytls-debug
-        path: ${{ github.workspace }}/V2rayNG/app/build/outputs/apk/**/*.apk
+        path: ${{ github.workspace }}/V2rayNG/app/build/outputs/apk/*/debug/*.apk
