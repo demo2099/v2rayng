@@ -66,7 +66,14 @@ jobs:
         cd V2rayNG
         echo "sdk.dir=${ANDROID_HOME}" > local.properties
         chmod 755 gradlew
-        ./gradlew assembleFdroidDebug --stacktrace
+        ./gradlew assembleFdroidDebug --stacktrace 2>&1 | tee /tmp/build.log
+
+    - name: Upload build log
+      if: always()
+      uses: actions/upload-artifact@v7
+      with:
+        name: build-log
+        path: /tmp/build.log
 
     - name: Upload Debug APK
       uses: actions/upload-artifact@v7
