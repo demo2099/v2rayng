@@ -64,7 +64,17 @@ jobs:
         cd ${{ github.workspace }}/V2rayNG
         echo "sdk.dir=${ANDROID_HOME}" > local.properties
         chmod 755 gradlew
-        ./gradlew assembleFdroidDebug --info --stacktrace
+        ./gradlew assembleFdroidDebug --stacktrace 2>&1 | tee /tmp/build.log
+
+    - name: Show build output
+      if: always()
+      run: |
+        echo '<details><summary>Build output</summary>' >> $GITHUB_STEP_SUMMARY
+        echo '' >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        cat /tmp/build.log >> $GITHUB_STEP_SUMMARY 2>/dev/null || echo "No log" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        echo '</details>' >> $GITHUB_STEP_SUMMARY
 
     - name: Find APK files
       if: always()
