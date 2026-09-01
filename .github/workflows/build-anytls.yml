@@ -64,31 +64,16 @@ jobs:
         cd ${{ github.workspace }}/V2rayNG
         echo "sdk.dir=${ANDROID_HOME}" > local.properties
         chmod 755 gradlew
-        set +e
-        ./gradlew assembleFdroidDebug --stacktrace 2>&1 | tee /tmp/build.log
-        BUILD_EXIT=${PIPESTATUS[0]}
-        echo "BUILD_EXIT=$BUILD_EXIT" >> $GITHUB_ENV
-        echo "exit code: $BUILD_EXIT"
-        exit 0
+        ./gradlew assembleFdroidDebug --info --stacktrace 2>&1 | tail -200
 
-    - name: Dump build log to summary
+    - name: Find APK files
       if: always()
       run: |
-        echo '<details><summary>Build Log (last 200 lines)</summary>' >> $GITHUB_STEP_SUMMARY
-        echo '' >> $GITHUB_STEP_SUMMARY
-        echo '```' >> $GITHUB_STEP_SUMMARY
-        tail -200 /tmp/build.log >> $GITHUB_STEP_SUMMARY 2>/dev/null || echo "No build log" >> $GITHUB_STEP_SUMMARY
-        echo '```' >> $GITHUB_STEP_SUMMARY
-        echo '</details>' >> $GITHUB_STEP_SUMMARY
-        echo '' >> $GITHUB_STEP_SUMMARY
-        echo "## File search" >> $GITHUB_STEP_SUMMARY
-        echo '```' >> $GITHUB_STEP_SUMMARY
-        find ${{ github.workspace }}/V2rayNG/app/build/outputs -type f 2>/dev/null | head -50 >> $GITHUB_STEP_SUMMARY || echo "No outputs" >> $GITHUB_STEP_SUMMARY
-        echo '```' >> $GITHUB_STEP_SUMMARY
+        find ${{ github.workspace }}/V2rayNG/app/build/outputs -name "*.apk" -exec ls -lh {} \; 2>/dev/null || echo "No APKs found"
 
     - name: Upload Debug APK
       uses: actions/upload-artifact@v7
-      if: always()
+      if: success()
       with:
         name: v2rayNG-anytls-debug
-        path: ${{ github.workspace }}/V2rayNG/app/build/outputs/apk/fdroid/debug/
+        path: ${{ github.workspace }}/V2rayNG/app/build/outputs/**/*.apk
