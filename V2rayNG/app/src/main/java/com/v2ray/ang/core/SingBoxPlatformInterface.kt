@@ -8,21 +8,15 @@ import android.os.Build
 import android.system.OsConstants
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.util.LogUtil
-import io.nekohasekai.libbox.BridgeOptions
-import io.nekohasekai.libbox.BridgeSession
 import io.nekohasekai.libbox.ConnectionOwner
 import io.nekohasekai.libbox.ExchangeContext
 import io.nekohasekai.libbox.InterfaceUpdateListener
 import io.nekohasekai.libbox.LocalDNSTransport
 import io.nekohasekai.libbox.NetworkInterface as LibboxNetworkInterface
 import io.nekohasekai.libbox.NetworkInterfaceIterator
-import io.nekohasekai.libbox.NeighborUpdateListener
 import io.nekohasekai.libbox.Notification
 import io.nekohasekai.libbox.PlatformInterface
-import io.nekohasekai.libbox.PlatformUser
 import io.nekohasekai.libbox.RoutePrefix
-import io.nekohasekai.libbox.RoutePrefixIterator
-import io.nekohasekai.libbox.ShellSession
 import io.nekohasekai.libbox.StringIterator
 import io.nekohasekai.libbox.TunOptions
 import io.nekohasekai.libbox.WIFIState
@@ -38,7 +32,6 @@ class SingBoxPlatformInterface(
 
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
     private var underlyingNetwork: Network? = null
-    private var defaultInterface: String = ""
 
     private val connectivity: ConnectivityManager
         get() = service.getSystemService(ConnectivityManager::class.java)
@@ -267,6 +260,10 @@ class SingBoxPlatformInterface(
     override fun readWIFIState(): WIFIState? = null
     override fun clearDNSCache() {}
 
+    override fun systemCertificates(): StringIterator {
+        return StringArray(emptyList<String>().iterator())
+    }
+
     override fun localDNSTransport(): LocalDNSTransport {
         return object : LocalDNSTransport {
             override fun raw(): Boolean = false
@@ -292,41 +289,6 @@ class SingBoxPlatformInterface(
     }
 
     override fun sendNotification(notification: Notification) {}
-
-    override fun startNeighborMonitor(listener: NeighborUpdateListener) {}
-
-    override fun closeNeighborMonitor(listener: NeighborUpdateListener) {}
-
-    override fun registerMyInterface(name: String) {
-        defaultInterface = name
-    }
-
-    override fun usePlatformBridge(): Boolean = false
-
-    override fun usePlatformShell(): Boolean = false
-
-    override fun checkPlatformShell() {}
-
-    override fun createBridge(options: BridgeOptions): BridgeSession? = null
-
-    override fun lookupSFTPServer(): String? = null
-
-    override fun lookupUser(username: String): PlatformUser? = null
-
-    override fun openShellSession(
-        user: PlatformUser,
-        command: String,
-        environ: StringIterator,
-        term: String,
-        rows: Int,
-        cols: Int
-    ): ShellSession? = null
-
-    override fun readSystemSSHHostKey(): String? = null
-
-    override fun tailscaleHostname(): String? = null
-
-    override fun cancelNotification(identifier: String, typeID: Int) {}
 
     private fun notifyInterfaceUpdate(network: Network, listener: InterfaceUpdateListener) {
         val cm = connectivity
