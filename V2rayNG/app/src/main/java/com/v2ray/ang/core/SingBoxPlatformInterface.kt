@@ -4,6 +4,7 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.VpnService
+import android.net.VpnService.Builder
 import android.os.Build
 import android.system.OsConstants
 import com.v2ray.ang.AppConfig
@@ -43,7 +44,7 @@ class SingBoxPlatformInterface(
     }
 
     override fun openTun(options: TunOptions): Int {
-        val builder = android.net.VpnService.Builder()
+        val builder = Builder()
         builder.setMtu(options.mtu)
 
         val inet4 = options.inet4Address
