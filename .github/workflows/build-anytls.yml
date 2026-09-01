@@ -78,4 +78,4 @@ jobs:
       if: always()
       with:
         name: v2rayNG-anytls-debug
-        path: ${{ github.workspace }}/V2rayNG/app/build/outputs/apk/**/*
+        path: ${{ github.workspace }}/V2rayNG/app/build/outputs/apk/fdroid/debug/
