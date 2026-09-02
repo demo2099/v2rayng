@@ -137,7 +137,7 @@ object CoreServiceManager {
         NotificationManager.showNotification(currentConfig)
 
         // Start sing-box
-        SingBoxNativeManager.startService(result.content, platformInterface!!)
+        SingBoxNativeManager.startService(result.content, platformInterface!!, service)
 
         if (!isRunning()) {
             error("sing-box failed to start")

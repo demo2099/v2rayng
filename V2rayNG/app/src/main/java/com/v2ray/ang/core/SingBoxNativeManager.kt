@@ -38,9 +38,9 @@ object SingBoxNativeManager {
     private val delayTestLock = Any()
 
     fun initCoreEnv(context: Context?) {
+        val ctx = context?.applicationContext ?: return
         if (initialized.compareAndSet(false, true)) {
             try {
-                val ctx = context?.applicationContext ?: return
                 val basePath = ctx.filesDir.absolutePath
                 this.basePath = basePath
                 val workingPath = "$basePath/sing-box"
@@ -87,7 +87,7 @@ object SingBoxNativeManager {
     }
 
     @Synchronized
-    fun startService(config: String, platform: PlatformInterface) {
+    fun startService(config: String, platform: PlatformInterface, context: Context) {
         if (running.get()) {
             LogUtil.w(AppConfig.TAG, "sing-box service already running, stopping first")
             stopService()
@@ -103,6 +103,10 @@ object SingBoxNativeManager {
 
                 override fun serviceStop() {
                     LogUtil.d(AppConfig.TAG, "sing-box service stop requested")
+                    runCatching {
+                        File(context.filesDir, "service_stopped.txt")
+                            .writeText("time=${System.currentTimeMillis()}\n")
+                    }
                     stopService()
                 }
 
@@ -129,27 +133,28 @@ object SingBoxNativeManager {
         } catch (e: Exception) {
             running.set(false)
             LogUtil.e(AppConfig.TAG, "Failed to start sing-box service", e)
-            dumpStartError(e)
+            dumpStartError(context, e)
             throw e
         }
     }
 
     /**
-     * Persists the exact start failure to [basePath]/start_error.txt.
+     * Persists the exact start failure to filesDir/start_error.txt.
      *
      * gomobile does NOT bridge Go stdout/stderr into Android logcat, and the fork never creates
-     * a CommandClient, so the exception thrown here is otherwise invisible. Writing it to a file
-     * in filesDir lets us retrieve it with `adb shell run-as com.v2ray.ang.fdroid cat
-     * files/start_error.txt` even though logcat stays empty.
+     * a CommandClient, so the exception thrown here is otherwise invisible. `context.filesDir`
+     * is used directly (NOT the cached [basePath] from initCoreEnv, which can be null if
+     * initCoreEnv was first called with a null context) so the file is always written. Retrieve
+     * with `adb shell run-as com.v2ray.ang.fdroid cat files/start_error.txt`.
      */
-    private fun dumpStartError(e: Exception) {
+    private fun dumpStartError(context: Context, e: Exception) {
         runCatching {
-            val path = basePath ?: return@runCatching
+            val dir = context.filesDir.absolutePath
             val sb = StringBuilder()
             sb.append("time=").append(System.currentTimeMillis()).append("\n")
             sb.append("msg=").append(e.message).append("\n")
             sb.append("stack:\n").append(Log.getStackTraceString(e)).append("\n")
-            File(path, "start_error.txt").writeText(sb.toString())
+            File(dir, "start_error.txt").writeText(sb.toString())
         }
     }
 
