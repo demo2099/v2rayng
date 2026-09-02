@@ -144,9 +144,11 @@ object SingBoxConfigManager {
     // ==================== Log ====================
 
     private fun buildLogConfig(context: Context): JsonObject = JsonObject().apply {
-        // "info" (instead of "warn") so outbound dial failures — the exact reason a node won't
-        // connect — are recorded.
-        addProperty("level", "info")
+        // "debug" (instead of "info") so we capture the TUN stack creation, route setup and the
+        // first outbound dial — the exact sequence that runs right before the silent VPN-mode crash.
+        // Delivered both to `log.output` (buffered) and, line-by-line, to singbox_debug.txt via the
+        // CommandServerHandler.writeDebugMessage sink.
+        addProperty("level", "debug")
         addProperty("timestamp", true)
         // gomobile does not bridge Go's stdout/stderr into logcat, so `log.level` alone would
         // produce nothing readable. Writing to a file is the only way to get sing-box's logs off

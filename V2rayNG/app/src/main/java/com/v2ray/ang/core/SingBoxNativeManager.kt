@@ -56,14 +56,6 @@ object SingBoxNativeManager {
                 options.fixAndroidStack = true
 
                 Libbox.setup(options)
-                // Capture Go-side panics (e.g. the gvisor tun stack) to a file. gomobile does
-                // not bridge Go stderr to logcat, and an unrecovered goroutine panic kills the
-                // process before the buffered log.output is flushed. debug.SetCrashOutput
-                // (wrapped by libbox.RedirectStderr) writes the panic stack synchronously on
-                // crash, so it survives process death and is retrievable via run-as.
-                runCatching {
-                    Libbox.RedirectStderr(File(ctx.filesDir, "box_stderr.log").absolutePath)
-                }.onFailure { LogUtil.w(AppConfig.TAG, "RedirectStderr unavailable", it) }
                 LogUtil.i(AppConfig.TAG, "sing-box core environment initialized successfully")
             } catch (e: Exception) {
                 LogUtil.e(AppConfig.TAG, "Failed to initialize sing-box core environment", e)
@@ -104,6 +96,13 @@ object SingBoxNativeManager {
         try {
             LogUtil.i(AppConfig.TAG, "Starting sing-box service...")
 
+            // Persist sing-box's own log lines (delivered through writeDebugMessage) to a file as
+            // they arrive. gomobile does NOT bridge Go stderr to logcat, and the `log.output` file is
+            // buffered, so a crash that kills the process before a flush loses every line. Writing
+            // here per-line (and flushing) captures the LAST thing sing-box did before it died -- the
+            // single most useful clue for an otherwise-silent VPN-mode crash.
+            val debugLog = File(context.filesDir, "singbox_debug.txt")
+            val debugWriter = debugLog.bufferedWriter()
             val handler = object : CommandServerHandler {
                 override fun serviceReload() {
                     LogUtil.d(AppConfig.TAG, "sing-box service reload requested")
@@ -111,6 +110,10 @@ object SingBoxNativeManager {
 
                 override fun serviceStop() {
                     LogUtil.d(AppConfig.TAG, "sing-box service stop requested")
+                    runCatching {
+                        debugWriter.flush()
+                        debugWriter.close()
+                    }
                     runCatching {
                         File(context.filesDir, "service_stopped.txt")
                             .writeText("time=${System.currentTimeMillis()}\n")
@@ -129,6 +132,10 @@ object SingBoxNativeManager {
 
                 override fun writeDebugMessage(message: String) {
                     LogUtil.d(AppConfig.TAG, "sing-box: $message")
+                    runCatching {
+                        debugWriter.append(message).append('\n')
+                        debugWriter.flush()
+                    }
                 }
             }
 
