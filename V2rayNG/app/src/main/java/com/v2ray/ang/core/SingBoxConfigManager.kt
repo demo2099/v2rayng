@@ -251,16 +251,26 @@ object SingBoxConfigManager {
         addProperty("mtu", SettingsManager.getVpnMtu())
         addProperty("auto_route", true)
         addProperty("strict_route", false)
-        // "gvisor" is required here. Switching to "mixed"/"system" made EVERY node time out on
-        // device: on Android the OS TCP stack cannot be driven through the VpnService fd, so
-        // outbound dials never complete. Verified empirically - do not switch to mixed/system.
-        addProperty("stack", "gvisor")
-        // Endpoint-independent NAT disabled for diagnosis: the gvisor TUN stack panics silently
-        // during VPN startup on this device (Honor CLK-AN00 / Android 14). endpoint_independent_nat
-        // is the most device/kernel-sensitive gvisor option, so it is the prime suspect. If VPN
-        // starts without it, this was the trigger; if it still crashes, the gvisor stack itself is
-        // broken here and we must enable the system stack via a correct protect() path instead.
-        // addProperty("endpoint_independent_nat", true)
+        // PIVOT (run #44): switch from "gvisor" to "system" to bypass gvisor entirely.
+        //
+        // Diagnosis so far: VPN mode dies with a SILENT Go panic during box.Start()/startOrReloadService
+        // - no tombstone, no FATAL, no log lines in either singbox.log (log.output) or singbox_debug.txt
+        // (writeDebugMessage). Proxy mode (same anytls outbound + DNS/route) works fine, so the fault is
+        // isolated to the TUN path. Run #43 showed removing endpoint_independent_nat did NOT help, which
+        // means the gvisor stack itself is broken on this device (Honor CLK-AN00 / Android 14, MediaTek).
+        //
+        // The "system" stack drives the OS network stack instead of gvisor's userspace netstack, which
+        // avoids the broken gvisor code path. It needs each outbound socket protected from the VPN routing
+        // loop; SingBoxPlatformInterface.autoDetectInterfaceControl(fd) already calls service.protect(fd),
+        // so the protect path is wired. (The old comment warning that mixed/system "made every node time
+        // out" predates this protect wiring and is now considered stale.)
+        //
+        // Expected outcomes:
+        //   - VPN works  -> root cause confirmed (gvisor broken on device); system stack is the fix.
+        //   - diff failure (nodes timeout / explicit errors in singbox.log) -> protect() path is the
+        //     issue; chase autoDetectInterfaceControl / findConnectionOwner / VpnService fd.
+        addProperty("stack", "system")
+        // endpoint_independent_nat is a gvisor-only option; it is not valid for the system stack.
 
         // Per-app proxy
         if (MmkvManager.decodeSettingsBool(AppConfig.PREF_PER_APP_PROXY) == true) {
