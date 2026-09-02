@@ -102,6 +102,18 @@ getSystemProxyStatus, serviceReload, serviceStop, setSystemProxyEnabled, writeDe
 ### 7. 编译状态
 **编译成功** - 经过 7+ 次 CI 迭代，所有 Kotlin 和 Java 编译错误已解决。
 
+### 8. 运行时 Bug 修复（2026-09-02）
+
+#### Bug #1（严重）：VPN 模式永远不激活
+- **文件**：`CoreVpnService.kt:80`, `CoreServiceManager.kt:114`
+- **问题**：`CoreVpnService.startService()` 调用 `CoreServiceManager.startCoreLoop(null)`，`vpnInterface` 始终为 null，导致 `vpnMode = vpnInterface != null` 永远为 false。sing-box 生成 mixed proxy 配置而非 TUN 配置，VPN 隧道从未建立。
+- **修复**：`startCoreLoop()` 新增 `vpnMode` 参数，`CoreVpnService` 传入 `vpnMode = true`。
+
+#### Bug #2（严重）：DNS 规则语法无效
+- **文件**：`SingBoxConfigManager.kt:89-103`
+- **问题**：DNS 规则使用 `rule_set` 配合 `geosite:cn`/`geoip:cn` 直接引用，sing-box 要求 `rule_set` 必须先在 `route.rule_set` 数组中定义 tag。
+- **修复**：改用 `domain_suffix` 和 `ip_cidr` 规则。
+
 ---
 
 ## 当前问题：运行时 AnyTLS 连接不工作
