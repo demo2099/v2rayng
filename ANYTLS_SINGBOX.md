@@ -121,6 +121,16 @@ getSystemProxyStatus, serviceReload, serviceStop, setSystemProxyEnabled, writeDe
 - **问题**：DNS 规则使用 `rule_set` 配合 `geosite:cn`/`geoip:cn` 直接引用，sing-box 要求 `rule_set` 必须先在 `route.rule_set` 数组中定义 tag。
 - **修复**：改用 `domain_suffix` 和 `ip_cidr` 规则。
 
+#### Bug #3（严重）：sing-box 1.13 已移除的字段导致 VPN 起不来（2026-09-02）
+- **现象**：点连接/VPN 按钮没反应，服务起不来（延迟测试之前也 `-1`，但那是另一回事）。
+- **根因**：`getSingBoxConfig`（连接用的完整配置）还在生成 sing-box **1.13 已删除**的字段，`startOrReloadService` 直接拒配置：
+  1. inbound 上的 `sniff` / `sniff_override_destination` —— 1.11 弃用、1.13 删除（嗅探改到 `route.rules` 的 `action: sniff`，配置里已有）
+  2. `{"type":"dns"}` outbound —— 1.13 删除（DNS 由 dns 模块 + `hijack-dns` 规则动作处理）
+  3. `route.auto_detect_interface` —— 1.13 非法字段；改为 `route.default_domain_resolver`（如 `"local"`）
+- **验证**：本地用官方 `sing-box-1.13.21` CLI 对完整配置跑 `sing-box check`，逐条报错直到去掉上述字段并加 `default_domain_resolver` 后 `exit 0`。
+- **修复**（`SingBoxConfigManager.kt`）：`buildTunInbound` / `buildMixedInbound` 去掉 sniff 字段；`buildOutboundsConfig` 去掉 `dns` outbound；`buildRouteConfig` 去掉 `auto_detect_interface`、加 `default_domain_resolver`。
+- 注意：延迟测试用的 `getSpeedtestConfig` 因为 `mixed` inbound 用 `sniff=false` 且无 `dns`/`auto_detect_interface`，所以没踩这些坑，之前 `check` 就过。
+
 ---
 
 ## 当前问题：运行时 AnyTLS 连接不工作

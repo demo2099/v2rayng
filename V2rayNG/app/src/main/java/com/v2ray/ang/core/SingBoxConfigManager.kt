@@ -85,7 +85,7 @@ object SingBoxConfigManager {
                     addProperty("timestamp", false)
                 })
                 add("inbounds", JsonArray().apply {
-                    add(buildMixedInbound(port, sniff = false))
+                    add(buildMixedInbound(port))
                 })
                 add("outbounds", JsonArray().apply {
                     add(outbound)
@@ -179,7 +179,7 @@ object SingBoxConfigManager {
         // connecting to 127.0.0.1 from inside the app reaches this listener.
         val socksPort = SettingsManager.getSocksPort()
         if (socksPort > 0) {
-            add(buildMixedInbound(socksPort, sniff = true))
+            add(buildMixedInbound(socksPort))
         }
     }
 
@@ -201,8 +201,6 @@ object SingBoxConfigManager {
         addProperty("strict_route", false)
         addProperty("stack", "gvisor")
         addProperty("endpoint_independent_nat", true)
-        addProperty("sniff", true)
-        addProperty("sniff_override_destination", true)
 
         // Per-app proxy
         if (MmkvManager.decodeSettingsBool(AppConfig.PREF_PER_APP_PROXY) == true) {
@@ -223,15 +221,11 @@ object SingBoxConfigManager {
         }
     }
 
-    private fun buildMixedInbound(port: Int, sniff: Boolean): JsonObject = JsonObject().apply {
+    private fun buildMixedInbound(port: Int): JsonObject = JsonObject().apply {
         addProperty("type", "mixed")
         addProperty("tag", "mixed-in")
         addProperty("listen", "127.0.0.1")
         addProperty("listen_port", port)
-        if (sniff) {
-            addProperty("sniff", true)
-            addProperty("sniff_override_destination", true)
-        }
     }
 
     // ==================== Outbounds ====================
@@ -266,12 +260,6 @@ object SingBoxConfigManager {
         add(JsonObject().apply {
             addProperty("type", "block")
             addProperty("tag", "block")
-        })
-
-        // DNS outbound
-        add(JsonObject().apply {
-            addProperty("type", "dns")
-            addProperty("tag", "dns-out")
         })
     }
 
@@ -597,6 +585,8 @@ object SingBoxConfigManager {
 
         add("rules", rules)
         addProperty("final", "proxy")
-        addProperty("auto_detect_interface", true)
+        // sing-box 1.13 removed `auto_detect_interface`; outbounds that dial domains need an
+        // explicit resolver, otherwise `startOrReloadService` rejects the config.
+        addProperty("default_domain_resolver", "local")
     }
 }
