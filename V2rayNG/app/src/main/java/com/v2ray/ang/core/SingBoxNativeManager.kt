@@ -56,6 +56,14 @@ object SingBoxNativeManager {
                 options.fixAndroidStack = true
 
                 Libbox.setup(options)
+                // Capture Go-side panics (e.g. the gvisor tun stack) to a file. gomobile does
+                // not bridge Go stderr to logcat, and an unrecovered goroutine panic kills the
+                // process before the buffered log.output is flushed. debug.SetCrashOutput
+                // (wrapped by libbox.RedirectStderr) writes the panic stack synchronously on
+                // crash, so it survives process death and is retrievable via run-as.
+                runCatching {
+                    Libbox.RedirectStderr(File(ctx.filesDir, "box_stderr.log").absolutePath)
+                }.onFailure { LogUtil.w(AppConfig.TAG, "RedirectStderr unavailable", it) }
                 LogUtil.i(AppConfig.TAG, "sing-box core environment initialized successfully")
             } catch (e: Exception) {
                 LogUtil.e(AppConfig.TAG, "Failed to initialize sing-box core environment", e)
