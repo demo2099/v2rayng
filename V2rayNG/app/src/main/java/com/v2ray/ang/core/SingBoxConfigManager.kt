@@ -112,7 +112,11 @@ object SingBoxConfigManager {
     // ==================== Log ====================
 
     private fun buildLogConfig(): JsonObject = JsonObject().apply {
-        addProperty("level", "warn")
+        // "info" (instead of "warn") so outbound dial failures — the exact reason an AnyTLS node
+        // won't connect — are written to stderr and become visible via `adb logcat`. sing-box's
+        // operational logs are not routed into the app's in-app log, so logcat is the source of
+        // truth when a node fails to connect.
+        addProperty("level", "info")
         addProperty("timestamp", true)
     }
 
@@ -199,8 +203,14 @@ object SingBoxConfigManager {
         addProperty("mtu", SettingsManager.getVpnMtu())
         addProperty("auto_route", true)
         addProperty("strict_route", false)
-        addProperty("stack", "gvisor")
-        addProperty("endpoint_independent_nat", true)
+        // Use the sing-box default "mixed" stack (system TCP + gvisor UDP) instead of forcing
+        // pure "gvisor". AnyTLS is a persistent TCP mux protocol; under the gvisor TCP stack its
+        // long-lived session frequently stalls, while the default mixed stack routes TCP through
+        // the system network stack — the same path other working clients (sfa, v2rayN) use.
+        // Forcing gvisor also broke per-app routing parity with upstream defaults.
+        addProperty("stack", "mixed")
+        // endpoint_independent_nat is only valid on the gvisor stack; under "mixed"/"system" the
+        // system TCP stack is already endpoint-independent by default, so it is omitted here.
 
         // Per-app proxy
         if (MmkvManager.decodeSettingsBool(AppConfig.PREF_PER_APP_PROXY) == true) {
@@ -286,6 +296,9 @@ object SingBoxConfigManager {
         addProperty("server", profile.server)
         addProperty("server_port", profile.serverPort?.toIntOrNull() ?: 443)
         addProperty("password", profile.password)
+        // AnyTLS is a TCP-based multiplexing protocol. Pin the dial network explicitly so the
+        // behaviour matches other clients regardless of sing-box's dial-field defaults.
+        addProperty("network", "tcp")
 
         // TLS settings
         add("tls", buildTlsSettings(profile))
