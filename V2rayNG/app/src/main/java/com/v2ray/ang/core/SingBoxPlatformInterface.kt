@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.ParcelFileDescriptor
 import android.system.Os
 import android.system.OsConstants
+import android.util.Log
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.util.LogUtil
 import io.nekohasekai.libbox.ConnectionOwner
@@ -46,6 +47,23 @@ class SingBoxPlatformInterface(
     }
 
     override fun openTun(options: TunOptions): Int {
+        return try {
+            openTunInner(options)
+        } catch (e: Exception) {
+            // gomobile never forwards Go/JNI exceptions to logcat; capture the precise TUN
+            // failure to a file so it can be pulled with run-as even when logcat stays empty.
+            runCatching {
+                val sb = StringBuilder()
+                sb.append("time=").append(System.currentTimeMillis()).append("\n")
+                sb.append("msg=").append(e.message).append("\n")
+                sb.append("stack:\n").append(Log.getStackTraceString(e)).append("\n")
+                File(service.filesDir, "tun_error.txt").writeText(sb.toString())
+            }
+            throw e
+        }
+    }
+
+    private fun openTunInner(options: TunOptions): Int {
         val builder = service.Builder()
         builder.setMtu(options.mtu)
 

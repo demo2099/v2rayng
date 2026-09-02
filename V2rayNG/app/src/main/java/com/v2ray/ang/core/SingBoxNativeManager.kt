@@ -1,6 +1,7 @@
 package com.v2ray.ang.core
 
 import android.content.Context
+import android.util.Log
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.util.LogUtil
 import io.nekohasekai.libbox.CommandServer
@@ -29,6 +30,10 @@ object SingBoxNativeManager {
     private var commandServer: CommandServer? = null
     private val running = AtomicBoolean(false)
 
+    /** Persisted sing-box base path (== app filesDir) so we can dump start errors to a file
+     *  even when logcat is unavailable (gomobile does not bridge Go logs to logcat). */
+    private var basePath: String? = null
+
     /** Serializes the short-lived delay-test instances, they share process wide globals. */
     private val delayTestLock = Any()
 
@@ -37,6 +42,7 @@ object SingBoxNativeManager {
             try {
                 val ctx = context?.applicationContext ?: return
                 val basePath = ctx.filesDir.absolutePath
+                this.basePath = basePath
                 val workingPath = "$basePath/sing-box"
                 val tempPath = ctx.cacheDir.absolutePath
 
@@ -123,7 +129,27 @@ object SingBoxNativeManager {
         } catch (e: Exception) {
             running.set(false)
             LogUtil.e(AppConfig.TAG, "Failed to start sing-box service", e)
+            dumpStartError(e)
             throw e
+        }
+    }
+
+    /**
+     * Persists the exact start failure to [basePath]/start_error.txt.
+     *
+     * gomobile does NOT bridge Go stdout/stderr into Android logcat, and the fork never creates
+     * a CommandClient, so the exception thrown here is otherwise invisible. Writing it to a file
+     * in filesDir lets us retrieve it with `adb shell run-as com.v2ray.ang.fdroid cat
+     * files/start_error.txt` even though logcat stays empty.
+     */
+    private fun dumpStartError(e: Exception) {
+        runCatching {
+            val path = basePath ?: return@runCatching
+            val sb = StringBuilder()
+            sb.append("time=").append(System.currentTimeMillis()).append("\n")
+            sb.append("msg=").append(e.message).append("\n")
+            sb.append("stack:\n").append(Log.getStackTraceString(e)).append("\n")
+            File(path, "start_error.txt").writeText(sb.toString())
         }
     }
 
