@@ -12,6 +12,7 @@ import android.system.OsConstants
 import android.util.Log
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.util.LogUtil
+import java.io.File
 import io.nekohasekai.libbox.ConnectionOwner
 import io.nekohasekai.libbox.ExchangeContext
 import io.nekohasekai.libbox.InterfaceUpdateListener
