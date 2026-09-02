@@ -255,7 +255,12 @@ object SingBoxConfigManager {
         // device: on Android the OS TCP stack cannot be driven through the VpnService fd, so
         // outbound dials never complete. Verified empirically - do not switch to mixed/system.
         addProperty("stack", "gvisor")
-        addProperty("endpoint_independent_nat", true)
+        // Endpoint-independent NAT disabled for diagnosis: the gvisor TUN stack panics silently
+        // during VPN startup on this device (Honor CLK-AN00 / Android 14). endpoint_independent_nat
+        // is the most device/kernel-sensitive gvisor option, so it is the prime suspect. If VPN
+        // starts without it, this was the trigger; if it still crashes, the gvisor stack itself is
+        // broken here and we must enable the system stack via a correct protect() path instead.
+        // addProperty("endpoint_independent_nat", true)
 
         // Per-app proxy
         if (MmkvManager.decodeSettingsBool(AppConfig.PREF_PER_APP_PROXY) == true) {
