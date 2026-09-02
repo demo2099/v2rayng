@@ -231,8 +231,11 @@ object CoreServiceManager {
     }
 
     /**
-     * Measures the connection delay.
-     * Uses a simple HTTP request through the proxy instead of sing-box's measureDelay.
+     * Measures the delay of the currently running connection.
+     *
+     * The request is issued through the loopback `mixed` inbound that the running
+     * sing-box config always exposes, so the number reflects the latency of the active
+     * node instead of the device's direct connectivity.
      */
     private fun measureV2rayDelay() {
         if (!isRunning()) {
@@ -245,14 +248,28 @@ object CoreServiceManager {
             var errorStr = ""
 
             try {
-                // Simple delay test via HTTP request
+                // The delay has to be measured *through* the running core. The main config
+                // always exposes a loopback mixed inbound (see SingBoxConfigManager) and the
+                // app bypasses its own TUN, so 127.0.0.1:<socksPort> is reachable even while
+                // the VPN is up. A direct request would only measure the device's own
+                // connectivity and report -1 whenever the test URL is not reachable directly.
                 val url = SettingsManager.getDelayTestUrl()
+                val socksPort = SettingsManager.getSocksPort()
                 val startTime = System.currentTimeMillis()
-                val connection = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+                val connection = if (socksPort > 0) {
+                    val proxy = java.net.Proxy(
+                        java.net.Proxy.Type.HTTP,
+                        java.net.InetSocketAddress("127.0.0.1", socksPort)
+                    )
+                    java.net.URL(url).openConnection(proxy)
+                } else {
+                    java.net.URL(url).openConnection()
+                } as java.net.HttpURLConnection
                 connection.connectTimeout = 5000
                 connection.readTimeout = 5000
                 connection.connect()
-                time = System.currentTimeMillis() - startTime
+                val responseCode = connection.responseCode
+                time = if (responseCode in 200..399) System.currentTimeMillis() - startTime else -1L
                 connection.disconnect()
             } catch (e: Exception) {
                 LogUtil.e(AppConfig.TAG, "StartCore-Manager: Failed to measure delay", e)

@@ -50,6 +50,24 @@ object CoreConfigManager {
     }
 
     /**
+     * Runs a real latency test for a profile: starts a short-lived sing-box instance that
+     * only carries this profile's outbound plus a loopback inbound, then issues one HTTP
+     * request through it.
+     *
+     * @return round trip time in milliseconds, or -1 when the config cannot be built or
+     *         the request fails.
+     */
+    fun measureOutboundDelay(context: Context, guid: String, url: String): Long {
+        val port = SingBoxNativeManager.findFreePort()
+        val configResult = SingBoxConfigManager.getSpeedtestConfig(context, guid, port)
+        if (!configResult.status) {
+            LogUtil.e(AppConfig.TAG, "Failed to build speedtest config: ${configResult.errorMessage}")
+            return -1L
+        }
+        return SingBoxNativeManager.measureOutboundDelay(configResult.content, url, port)
+    }
+
+    /**
      * Get initial/test configuration.
      */
     fun getInitConfig(context: Context): String {

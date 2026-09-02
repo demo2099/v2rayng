@@ -2,6 +2,9 @@ name: Build v2rayNG with sing-box (AnyTLS)
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - anytls-support
 
 permissions:
   contents: write

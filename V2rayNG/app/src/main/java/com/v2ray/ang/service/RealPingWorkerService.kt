@@ -122,32 +122,10 @@ class RealPingWorkerService(
             }
         }
 
-        val configResult = CoreConfigManager.getV2rayConfig4Speedtest(context, guid)
-        if (!configResult.status) {
-            return retFailure
-        }
+        // Real latency test: a temporary sing-box instance is started with only this
+        // profile's outbound, and the HTTP request is issued *through* that node.
         return RealPingExecutionLimiter.run(config.configType) {
-            measureHttpDelay(SettingsManager.getDelayTestUrl())
-        }
-    }
-
-    private fun measureHttpDelay(url: String): Long {
-        return try {
-            val startTime = System.currentTimeMillis()
-            val connection = java.net.URL(url).openConnection() as java.net.HttpURLConnection
-            connection.connectTimeout = 5000
-            connection.readTimeout = 5000
-            connection.requestMethod = "HEAD"
-            connection.connect()
-            val responseCode = connection.responseCode
-            connection.disconnect()
-            if (responseCode == 200 || responseCode == 301 || responseCode == 302) {
-                System.currentTimeMillis() - startTime
-            } else {
-                -1L
-            }
-        } catch (e: Exception) {
-            -1L
+            CoreConfigManager.measureOutboundDelay(context, guid, SettingsManager.getDelayTestUrl())
         }
     }
 

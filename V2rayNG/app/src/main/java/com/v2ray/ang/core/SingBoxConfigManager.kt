@@ -23,6 +23,12 @@ import com.v2ray.ang.util.Utils
  */
 object SingBoxConfigManager {
 
+    /** Outbound tag that the route table sends everything to. */
+    private const val TAG_PROXY = "proxy"
+
+    /** Outbound tag used as a fallback inside the speedtest configuration. */
+    private const val TAG_DIRECT = "direct"
+
     /**
      * Generate a complete sing-box configuration for the given profile.
      *
@@ -50,6 +56,56 @@ object SingBoxConfigManager {
         } catch (e: Exception) {
             LogUtil.e(AppConfig.TAG, "Failed to generate sing-box config", e)
             return ConfigResult(false, guid, "Failed to generate config: ${e.message}")
+        }
+    }
+
+    /**
+     * Minimal configuration used by the real-ping (latency) test.
+     *
+     * It contains only a loopback `mixed` inbound on [port] plus the node's own outbound,
+     * so a short-lived sing-box instance can measure a real HTTP request that actually
+     * travels through the node. No DNS / routing / TUN is involved, which keeps the
+     * instance cheap to start and stop.
+     *
+     * @param port local port the temporary instance should listen on
+     */
+    fun getSpeedtestConfig(context: Context, guid: String, port: Int): ConfigResult {
+        try {
+            val profile = MmkvManager.decodeServerConfig(guid)
+                ?: return ConfigResult(false, guid, "Profile not found")
+
+            val outbound = buildProtocolOutbound(profile)
+                ?: return ConfigResult(false, guid, "Unsupported protocol: ${profile.configType}")
+            // Route everything through this single outbound.
+            outbound.addProperty("tag", TAG_PROXY)
+
+            val config = JsonObject().apply {
+                add("log", JsonObject().apply {
+                    addProperty("level", "error")
+                    addProperty("timestamp", false)
+                })
+                add("inbounds", JsonArray().apply {
+                    add(buildMixedInbound(port, sniff = false))
+                })
+                add("outbounds", JsonArray().apply {
+                    add(outbound)
+                    add(JsonObject().apply {
+                        addProperty("type", "direct")
+                        addProperty("tag", TAG_DIRECT)
+                    })
+                })
+                add("route", JsonObject().apply {
+                    add("rules", JsonArray())
+                    addProperty("final", TAG_PROXY)
+                })
+            }
+
+            val json = JsonUtil.toJsonPretty(config)
+                ?: return ConfigResult(false, guid, "Failed to serialize sing-box config")
+            return ConfigResult(true, guid, json)
+        } catch (e: Exception) {
+            LogUtil.e(AppConfig.TAG, "Failed to generate speedtest config", e)
+            return ConfigResult(false, guid, "Failed to generate speedtest config: ${e.message}")
         }
     }
 
@@ -113,55 +169,68 @@ object SingBoxConfigManager {
     private fun buildInboundsConfig(context: Context, vpnMode: Boolean): JsonArray = JsonArray().apply {
         if (vpnMode) {
             // TUN inbound for VPN mode
-            add(JsonObject().apply {
-                addProperty("type", "tun")
-                addProperty("tag", "tun-in")
-                addProperty("interface_name", "singtun0")
+            add(buildTunInbound())
+        }
 
-                // Address
-                val addresses = JsonArray()
-                addresses.add("172.19.0.1/30")
-                if (MmkvManager.decodeSettingsBool(AppConfig.PREF_IPV6_ENABLED) == true) {
-                    addresses.add("fdfe:dcba:9876::1/126")
+        // A local mixed (SOCKS + HTTP) inbound is always exposed, even in VPN mode.
+        // Upstream xray-core based v2rayNG does the same: it keeps a local SOCKS port so
+        // that other apps, the built-in delay test and the "my IP" lookup can reach the
+        // proxy. The app itself bypasses the TUN (addDisallowedApplication), so
+        // connecting to 127.0.0.1 from inside the app reaches this listener.
+        val socksPort = SettingsManager.getSocksPort()
+        if (socksPort > 0) {
+            add(buildMixedInbound(socksPort, sniff = true))
+        }
+    }
+
+    private fun buildTunInbound(): JsonObject = JsonObject().apply {
+        addProperty("type", "tun")
+        addProperty("tag", "tun-in")
+        addProperty("interface_name", "singtun0")
+
+        // Address
+        val addresses = JsonArray()
+        addresses.add("172.19.0.1/30")
+        if (MmkvManager.decodeSettingsBool(AppConfig.PREF_IPV6_ENABLED) == true) {
+            addresses.add("fdfe:dcba:9876::1/126")
+        }
+        add("address", addresses)
+
+        addProperty("mtu", SettingsManager.getVpnMtu())
+        addProperty("auto_route", true)
+        addProperty("strict_route", false)
+        addProperty("stack", "gvisor")
+        addProperty("endpoint_independent_nat", true)
+        addProperty("sniff", true)
+        addProperty("sniff_override_destination", true)
+
+        // Per-app proxy
+        if (MmkvManager.decodeSettingsBool(AppConfig.PREF_PER_APP_PROXY) == true) {
+            val apps = MmkvManager.decodeSettingsStringSet(AppConfig.PREF_PER_APP_PROXY_SET)
+            val bypassApps = MmkvManager.decodeSettingsBool(AppConfig.PREF_BYPASS_APPS) == true
+
+            if (!apps.isNullOrEmpty()) {
+                if (bypassApps) {
+                    val exclude = JsonArray()
+                    apps.forEach { exclude.add(it) }
+                    add("exclude_package", exclude)
+                } else {
+                    val include = JsonArray()
+                    apps.forEach { include.add(it) }
+                    add("include_package", include)
                 }
-                add("address", addresses)
+            }
+        }
+    }
 
-                addProperty("mtu", SettingsManager.getVpnMtu())
-                addProperty("auto_route", true)
-                addProperty("strict_route", false)
-                addProperty("stack", "gvisor")
-                addProperty("endpoint_independent_nat", true)
-                addProperty("sniff", true)
-                addProperty("sniff_override_destination", true)
-
-                // Per-app proxy
-                if (MmkvManager.decodeSettingsBool(AppConfig.PREF_PER_APP_PROXY) == true) {
-                    val apps = MmkvManager.decodeSettingsStringSet(AppConfig.PREF_PER_APP_PROXY_SET)
-                    val bypassApps = MmkvManager.decodeSettingsBool(AppConfig.PREF_BYPASS_APPS) == true
-
-                    if (!apps.isNullOrEmpty()) {
-                        if (bypassApps) {
-                            val exclude = JsonArray()
-                            apps.forEach { exclude.add(it) }
-                            add("exclude_package", exclude)
-                        } else {
-                            val include = JsonArray()
-                            apps.forEach { include.add(it) }
-                            add("include_package", include)
-                        }
-                    }
-                }
-            })
-        } else {
-            // Mixed inbound for proxy-only mode
-            add(JsonObject().apply {
-                addProperty("type", "mixed")
-                addProperty("tag", "mixed-in")
-                addProperty("listen", "127.0.0.1")
-                addProperty("listen_port", SettingsManager.getSocksPort())
-                addProperty("sniff", true)
-                addProperty("sniff_override_destination", true)
-            })
+    private fun buildMixedInbound(port: Int, sniff: Boolean): JsonObject = JsonObject().apply {
+        addProperty("type", "mixed")
+        addProperty("tag", "mixed-in")
+        addProperty("listen", "127.0.0.1")
+        addProperty("listen_port", port)
+        if (sniff) {
+            addProperty("sniff", true)
+            addProperty("sniff_override_destination", true)
         }
     }
 
