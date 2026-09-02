@@ -88,17 +88,17 @@ object SingBoxConfigManager {
 
         // Chinese domains use local DNS
         rules.add(JsonObject().apply {
-            val domainList = JsonArray()
-            domainList.add("geosite:cn")
-            add("rule_set", domainList)
+            addProperty("domain_suffix", ".cn")
             addProperty("server", "local")
         })
 
-        // Chinese IPs use local DNS
+        // Private IPs use local DNS
         rules.add(JsonObject().apply {
-            val ruleSet = JsonArray()
-            ruleSet.add("geoip:cn")
-            add("rule_set", ruleSet)
+            val cidrList = JsonArray()
+            cidrList.add("10.0.0.0/8")
+            cidrList.add("172.16.0.0/12")
+            cidrList.add("192.168.0.0/16")
+            add("ip_cidr", cidrList)
             addProperty("server", "local")
         })
 

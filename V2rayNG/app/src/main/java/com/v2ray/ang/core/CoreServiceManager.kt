@@ -46,6 +46,9 @@ object CoreServiceManager {
     /** Tun descriptor the core was started with, null in the proxy only and root run modes. */
     private var currentVpnInterface: ParcelFileDescriptor? = null
 
+    /** Whether the core was started in VPN (TUN) mode. */
+    private var currentVpnMode: Boolean = false
+
     var serviceControl: SoftReference<ServiceControl>? = null
         set(value) {
             field = value
@@ -66,7 +69,7 @@ object CoreServiceManager {
     /**
      * Starts the sing-box core service.
      */
-    fun startCoreLoop(vpnInterface: ParcelFileDescriptor?): Boolean {
+    fun startCoreLoop(vpnInterface: ParcelFileDescriptor?, vpnMode: Boolean = vpnInterface != null): Boolean {
         if (isRunning()) {
             LogUtil.w(AppConfig.TAG, "StartCore-Manager: Core already running")
             return false
@@ -79,7 +82,7 @@ object CoreServiceManager {
         }
 
         try {
-            doStartCoreLoop(service, vpnInterface)
+            doStartCoreLoop(service, vpnInterface, vpnMode)
             return true
         } catch (e: Exception) {
             val message = e.message?.takeUnless { it.isBlank() } ?: e.javaClass.simpleName
@@ -91,7 +94,7 @@ object CoreServiceManager {
     }
 
     @Throws(Exception::class)
-    private fun doStartCoreLoop(service: Service, vpnInterface: ParcelFileDescriptor?) {
+    private fun doStartCoreLoop(service: Service, vpnInterface: ParcelFileDescriptor?, vpnMode: Boolean) {
         val mFilter = IntentFilter(AppConfig.BROADCAST_ACTION_SERVICE)
         mFilter.addAction(Intent.ACTION_SCREEN_ON)
         mFilter.addAction(Intent.ACTION_SCREEN_OFF)
@@ -99,19 +102,17 @@ object CoreServiceManager {
         ContextCompat.registerReceiver(service, mMsgReceive, mFilter, com.v2ray.ang.util.Utils.receiverFlags())
 
         currentVpnInterface = vpnInterface
-        launchCore(service, vpnInterface)
+        currentVpnMode = vpnMode
+        launchCore(service, vpnInterface, vpnMode = vpnMode)
         startNetworkMonitor(service)
     }
 
     @Throws(Exception::class)
-    private fun launchCore(service: Service, vpnInterface: ParcelFileDescriptor?, isReload: Boolean = false) {
+    private fun launchCore(service: Service, vpnInterface: ParcelFileDescriptor?, isReload: Boolean = false, vpnMode: Boolean = vpnInterface != null) {
         val guid = MmkvManager.getSelectServer() ?: error("No server selected")
         val config = MmkvManager.decodeServerConfig(guid) ?: error("Failed to decode server config")
 
-        LogUtil.i(AppConfig.TAG, "StartCore-Manager: Starting sing-box for ${config.remarks}")
-
-        // Determine if we're in VPN mode (TUN) or proxy-only mode (mixed)
-        val vpnMode = vpnInterface != null
+        LogUtil.i(AppConfig.TAG, "StartCore-Manager: Starting sing-box for ${config.remarks}, vpnMode=$vpnMode")
 
         // Generate sing-box config
         val result = SingBoxConfigManager.getSingBoxConfig(service, guid, vpnMode)
@@ -207,7 +208,7 @@ object CoreServiceManager {
             LogUtil.i(AppConfig.TAG, "StartCore-Manager: Core reload start...")
 
             SingBoxNativeManager.stopService()
-            launchCore(service, tunFd, isReload = true)
+            launchCore(service, tunFd, isReload = true, vpnMode = currentVpnMode)
 
             LogUtil.i(AppConfig.TAG, "StartCore-Manager: Core reload finished")
             true

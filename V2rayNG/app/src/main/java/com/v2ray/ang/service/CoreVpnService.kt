@@ -76,8 +76,8 @@ class CoreVpnService : VpnService(), ServiceControl {
 
     override fun startService() {
         // sing-box creates the TUN through PlatformInterface.openTun() callback
-        // We just need to start the core loop
-        if (!CoreServiceManager.startCoreLoop(null)) {
+        // Pass vpnMode=true so sing-box config generates TUN inbound instead of mixed proxy
+        if (!CoreServiceManager.startCoreLoop(null, vpnMode = true)) {
             LogUtil.e(AppConfig.TAG, "StartCore-VPN: Failed to start core loop")
             stopAllService()
             return
