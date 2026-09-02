@@ -203,14 +203,11 @@ object SingBoxConfigManager {
         addProperty("mtu", SettingsManager.getVpnMtu())
         addProperty("auto_route", true)
         addProperty("strict_route", false)
-        // Use the sing-box default "mixed" stack (system TCP + gvisor UDP) instead of forcing
-        // pure "gvisor". AnyTLS is a persistent TCP mux protocol; under the gvisor TCP stack its
-        // long-lived session frequently stalls, while the default mixed stack routes TCP through
-        // the system network stack — the same path other working clients (sfa, v2rayN) use.
-        // Forcing gvisor also broke per-app routing parity with upstream defaults.
-        addProperty("stack", "mixed")
-        // endpoint_independent_nat is only valid on the gvisor stack; under "mixed"/"system" the
-        // system TCP stack is already endpoint-independent by default, so it is omitted here.
+        // "gvisor" is required here. Switching to "mixed"/"system" made EVERY node time out on
+        // device: on Android the OS TCP stack cannot be driven through the VpnService fd, so
+        // outbound dials never complete. Verified empirically - do not switch to mixed/system.
+        addProperty("stack", "gvisor")
+        addProperty("endpoint_independent_nat", true)
 
         // Per-app proxy
         if (MmkvManager.decodeSettingsBool(AppConfig.PREF_PER_APP_PROXY) == true) {
