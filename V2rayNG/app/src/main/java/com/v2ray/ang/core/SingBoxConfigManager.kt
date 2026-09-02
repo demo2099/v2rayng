@@ -14,6 +14,7 @@ import com.v2ray.ang.handler.SettingsManager
 import com.v2ray.ang.util.JsonUtil
 import com.v2ray.ang.util.LogUtil
 import com.v2ray.ang.util.Utils
+import java.io.File
 
 /**
  * sing-box Configuration Manager
@@ -30,6 +31,25 @@ object SingBoxConfigManager {
     private const val TAG_DIRECT = "direct"
 
     /**
+     * File (inside the app's private `files/`) the core writes its own log to.
+     *
+     * gomobile does **not** bridge Go's stdout/stderr into Android's logcat, so sing-box's logs
+     * are completely invisible to `adb logcat`. `log.output` is therefore the only way to see why
+     * an outbound dial fails. Read it with:
+     *   adb shell run-as <pkg> cat files/singbox.log
+     */
+    private const val CORE_LOG_FILE = "singbox.log"
+
+    /** Same, for the short-lived instance started by the latency (real-ping) test. */
+    private const val CORE_SPEEDTEST_LOG_FILE = "singbox_speedtest.log"
+
+    /** Last full config handed to the core. Read with: adb shell run-as <pkg> cat files/debug_last_config.json */
+    private const val DEBUG_CONFIG_FILE = "debug_last_config.json"
+
+    /** Last speedtest config handed to the core. */
+    private const val DEBUG_SPEEDTEST_CONFIG_FILE = "debug_last_speedtest_config.json"
+
+    /**
      * Generate a complete sing-box configuration for the given profile.
      *
      * @param context Android context
@@ -43,7 +63,7 @@ object SingBoxConfigManager {
                 ?: return ConfigResult(false, guid, "Profile not found")
 
             val config = JsonObject().apply {
-                add("log", buildLogConfig())
+                add("log", buildLogConfig(context))
                 add("dns", buildDnsConfig(context, vpnMode))
                 add("inbounds", buildInboundsConfig(context, vpnMode))
                 add("outbounds", buildOutboundsConfig(profile))
@@ -52,6 +72,10 @@ object SingBoxConfigManager {
 
             val json = JsonUtil.toJsonPretty(config)
             LogUtil.d(AppConfig.TAG, "sing-box config generated: $json")
+            // Mirror the exact JSON handed to the core into the app's private dir. logcat truncates
+            // long lines and gomobile hides the core's own logs, so this dump is the ground truth
+            // for what the core is actually being fed.
+            dumpDebugFile(context, DEBUG_CONFIG_FILE, json ?: "")
             return ConfigResult(true, guid, json ?: "")
         } catch (e: Exception) {
             LogUtil.e(AppConfig.TAG, "Failed to generate sing-box config", e)
@@ -81,8 +105,12 @@ object SingBoxConfigManager {
 
             val config = JsonObject().apply {
                 add("log", JsonObject().apply {
-                    addProperty("level", "error")
-                    addProperty("timestamp", false)
+                    // The latency test is the cheapest way to reproduce a broken node: it dials the
+                    // node directly with no TUN/routing involved. Capture its log to a file so a
+                    // failing node reports the real dial error instead of a bare "-1".
+                    addProperty("level", "info")
+                    addProperty("timestamp", true)
+                    addProperty("output", File(context.filesDir, CORE_SPEEDTEST_LOG_FILE).absolutePath)
                 })
                 add("inbounds", JsonArray().apply {
                     add(buildMixedInbound(port))
@@ -102,6 +130,10 @@ object SingBoxConfigManager {
 
             val json = JsonUtil.toJsonPretty(config)
                 ?: return ConfigResult(false, guid, "Failed to serialize sing-box config")
+
+            // Start from a clean log file so each test run leaves only its own output behind.
+            runCatching { File(context.filesDir, CORE_SPEEDTEST_LOG_FILE).delete() }
+            dumpDebugFile(context, DEBUG_SPEEDTEST_CONFIG_FILE, json)
             return ConfigResult(true, guid, json)
         } catch (e: Exception) {
             LogUtil.e(AppConfig.TAG, "Failed to generate speedtest config", e)
@@ -111,13 +143,27 @@ object SingBoxConfigManager {
 
     // ==================== Log ====================
 
-    private fun buildLogConfig(): JsonObject = JsonObject().apply {
-        // "info" (instead of "warn") so outbound dial failures — the exact reason an AnyTLS node
-        // won't connect — are written to stderr and become visible via `adb logcat`. sing-box's
-        // operational logs are not routed into the app's in-app log, so logcat is the source of
-        // truth when a node fails to connect.
+    private fun buildLogConfig(context: Context): JsonObject = JsonObject().apply {
+        // "info" (instead of "warn") so outbound dial failures — the exact reason a node won't
+        // connect — are recorded.
         addProperty("level", "info")
         addProperty("timestamp", true)
+        // gomobile does not bridge Go's stdout/stderr into logcat, so `log.level` alone would
+        // produce nothing readable. Writing to a file is the only way to get sing-box's logs off
+        // the device. Pull with: adb shell run-as <pkg> cat files/singbox.log
+        addProperty("output", File(context.filesDir, CORE_LOG_FILE).absolutePath)
+    }
+
+    /**
+     * Write [content] to `files/[name]` inside the app's private dir so it can be pulled with
+     * `adb shell run-as <pkg> cat files/<name>`. Never throws - diagnostics must not break startup.
+     */
+    private fun dumpDebugFile(context: Context, name: String, content: String) {
+        runCatching {
+            File(context.filesDir, name).writeText(content)
+        }.onFailure {
+            LogUtil.w(AppConfig.TAG, "Failed to dump debug file $name: ${it.message}")
+        }
     }
 
     // ==================== DNS ====================
@@ -293,9 +339,11 @@ object SingBoxConfigManager {
         addProperty("server", profile.server)
         addProperty("server_port", profile.serverPort?.toIntOrNull() ?: 443)
         addProperty("password", profile.password)
-        // AnyTLS is a TCP-based multiplexing protocol. Pin the dial network explicitly so the
-        // behaviour matches other clients regardless of sing-box's dial-field defaults.
-        addProperty("network", "tcp")
+
+        // NOTE: do **not** add a "network" field here. sing-box has no `network` dial field (the
+        // valid ones are detour / bind_interface / connect_timeout / tcp_fast_open / udp_fragment /
+        // domain_resolver / network_strategy / network_type / ...). A bogus field is silently
+        // ignored at best and risks strict-parse rejection at worst.
 
         // TLS settings
         add("tls", buildTlsSettings(profile))
